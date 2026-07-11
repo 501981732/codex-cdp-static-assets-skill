@@ -1,0 +1,4 @@
+interface:
+  display_name: "合规 CDP 静态资源采集"
+  short_description: "被动记录浏览器自然加载的 JS、CSS 与其他静态资源"
+  default_prompt: "使用 $capture-static-assets-cdp 在授权范围内被动采集当前 Chrome 会话自然加载的静态资源。"
