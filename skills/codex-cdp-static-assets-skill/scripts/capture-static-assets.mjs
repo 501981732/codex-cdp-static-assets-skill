@@ -47,7 +47,7 @@ export function hostIsAllowed(hostname, patterns) {
 export function scopeHost(value, patterns) {
   try {
     const url = new URL(value);
-    if (!['http:', 'https:'].includes(url.protocol)) return { network: false, allowed: false, host: null };
+    if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) return { network: false, allowed: false, host: null };
     return {
       network: true,
       allowed: hostIsAllowed(url.hostname, patterns),
@@ -183,6 +183,45 @@ export function summarizeLedgerEntries(entries, limits, caseId) {
   };
 }
 
+export function selectResourceMarker(requestRecord, currentMarker) {
+  return requestRecord?.marker || currentMarker;
+}
+
+export function createBudgetTracker(initial, limits) {
+  let captured = Number(initial?.captured) || 0;
+  let totalBytes = Number(initial?.totalBytes) || 0;
+  const maximumBytes = limits.maxTotalMiB > 0 ? limits.maxTotalMiB * 1024 * 1024 : null;
+  const snapshot = () => ({
+    captured,
+    totalBytes,
+    remainingAssets: limits.maxAssets > 0 ? Math.max(0, limits.maxAssets - captured) : null,
+    remainingBytes: maximumBytes === null ? null : Math.max(0, maximumBytes - totalBytes),
+  });
+  return {
+    reserve(size) {
+      if (limits.maxAssets > 0 && captured >= limits.maxAssets) {
+        return { accepted: false, reason: 'asset-count-budget-exceeded' };
+      }
+      if (maximumBytes !== null && totalBytes + size > maximumBytes) {
+        return { accepted: false, reason: 'total-byte-budget-exceeded' };
+      }
+      captured += 1;
+      totalBytes += size;
+      return { accepted: true, reason: null };
+    },
+    rollback(size) {
+      captured = Math.max(0, captured - 1);
+      totalBytes = Math.max(0, totalBytes - size);
+    },
+    snapshot,
+  };
+}
+
+export function detectWorkshopBuildIds(body) {
+  const text = Buffer.isBuffer(body) ? body.toString('utf8') : String(body || '');
+  return [...new Set([...text.matchAll(/\/(?:assets\/)?static\/foundry-frontend-workshop\/([^/"'\\\s]+)\//g)].map((match) => match[1]))].sort();
+}
+
 export function isIgnorableTarget(info) {
   try {
     const protocol = new URL(info?.url || '').protocol;
@@ -220,14 +259,26 @@ async function readLedgerEntries(path) {
 }
 
 export async function waitForPending(tasks, timeoutMs = 2_000) {
-  let timer;
-  const outcome = await Promise.race([
-    Promise.allSettled([...tasks]).then(() => 'settled'),
-    new Promise((resolveTimeout) => {
-      timer = setTimeout(() => resolveTimeout('timed-out'), timeoutMs);
-    }),
-  ]);
-  clearTimeout(timer);
+  const deadline = Date.now() + timeoutMs;
+  while (tasks.size) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return 'timed-out';
+    let timer;
+    const outcome = await Promise.race([
+      Promise.allSettled([...tasks]).then(() => 'settled'),
+      new Promise((resolveTimeout) => {
+        timer = setTimeout(() => resolveTimeout('timed-out'), remaining);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (outcome === 'timed-out') return outcome;
+  }
+  return 'settled';
+}
+
+export async function closeAfterPending(client, tasks, timeoutMs = 2_000) {
+  const outcome = await waitForPending(tasks, timeoutMs);
+  client.close();
   return outcome;
 }
 
@@ -458,8 +509,6 @@ async function main() {
   let bodyFailures = 0;
   let rejectedAssets = 0;
   let totalBytes = 0;
-  let taskCaptured = priorTaskBudget.captured;
-  let taskBytes = priorTaskBudget.totalBytes;
   let networkEvents = 0;
   let lastNetworkEventAt = null;
   let writeChain = Promise.resolve();
@@ -472,17 +521,14 @@ async function main() {
   const observations = [];
   const networkObservations = [];
   const targetEventCounts = new Map();
+  const workshopBuildIds = new Set();
+  const budgetTracker = createBudgetTracker(priorTaskBudget, options.limits);
 
   const enqueueLine = (path, value) => {
     writeChain = writeChain.then(() => appendFile(path, `${JSON.stringify(value)}\n`));
     return writeChain;
   };
-  const taskBudgetSnapshot = () => ({
-    captured: taskCaptured,
-    totalBytes: taskBytes,
-    remainingAssets: options.maxAssets > 0 ? Math.max(0, options.maxAssets - taskCaptured) : null,
-    remainingBytes: options.maxTotalMiB > 0 ? Math.max(0, options.maxTotalMiB * 1024 * 1024 - taskBytes) : null,
-  });
+  const taskBudgetSnapshot = () => budgetTracker.snapshot();
 
   await writeFile(join(options.output, 'provenance.json'), JSON.stringify({
     startedAt,
@@ -577,12 +623,56 @@ async function main() {
 
   client.on('Network.requestWillBeSent', (params, sessionId) => {
     const key = `${sessionId}:${params.requestId}`;
+    const prior = resources.get(key);
     resources.set(key, {
       requestId: params.requestId,
       sessionId,
       requestUrl: params.request.url,
       initiatorType: params.initiator?.type,
+      marker: selectResourceMarker(prior, currentMarker),
     });
+    const requestScope = scopeHost(params.request.url, options.approvedNetworkHosts);
+    if (options.mode === 'capture' && requestScope.network && !requestScope.allowed) {
+      enqueueLine(riskPath, {
+        at: new Date().toISOString(),
+        kind: 'unapproved-request-host',
+        host: requestScope.host,
+        url: redactUrl(params.request.url),
+      });
+      requestStop(`Unapproved request host observed: ${requestScope.host}`);
+    }
+  });
+
+  client.on('Network.webSocketCreated', (params, sessionId) => {
+    const socketScope = scopeHost(params.url, options.approvedNetworkHosts);
+    if (!socketScope.network) return;
+    networkEvents += 1;
+    lastNetworkEventAt = new Date().toISOString();
+    targetEventCounts.set(sessionId, (targetEventCounts.get(sessionId) || 0) + 1);
+    if (options.mode === 'discover') {
+      const observation = {
+        at: new Date().toISOString(),
+        host: socketScope.host,
+        kind: null,
+        mimeType: null,
+        status: null,
+        url: redactUrl(params.url),
+        resourceType: 'WebSocket',
+        targetType: targetInfo.get(sessionId)?.type,
+      };
+      networkObservations.push(observation);
+      enqueueLine(networkObservationPath, observation);
+      return;
+    }
+    if (!socketScope.allowed) {
+      enqueueLine(riskPath, {
+        at: new Date().toISOString(),
+        kind: 'unapproved-websocket-host',
+        host: socketScope.host,
+        url: redactUrl(params.url),
+      });
+      requestStop(`Unapproved WebSocket host observed: ${socketScope.host}`);
+    }
   });
 
   client.on('Network.responseReceived', (params, sessionId) => {
@@ -671,7 +761,7 @@ async function main() {
       fromPrefetchCache: Boolean(response.fromPrefetchCache),
       fromServiceWorker: Boolean(response.fromServiceWorker),
       protocol: response.protocol,
-      marker: currentMarker,
+      marker: selectResourceMarker(prior, currentMarker),
       targetType: targetInfo.get(sessionId)?.type,
       targetUrl: targetInfo.get(sessionId)?.url,
     });
@@ -707,10 +797,7 @@ async function main() {
         const sha256 = createHash('sha256').update(body).digest('hex');
         let validation = validateBody(resource.kind, body);
         if (validation.accepted && body.length > maxBytes) validation = { accepted: false, reason: 'asset-budget-exceeded' };
-        if (validation.accepted && options.maxAssets > 0 && taskCaptured >= options.maxAssets) validation = { accepted: false, reason: 'asset-count-budget-exceeded' };
-        if (validation.accepted && options.maxTotalMiB > 0 && taskBytes + body.length > options.maxTotalMiB * 1024 * 1024) {
-          validation = { accepted: false, reason: 'total-byte-budget-exceeded' };
-        }
+        if (validation.accepted) validation = budgetTracker.reserve(body.length);
         if (!validation.accepted) {
           rejectedAssets += 1;
           await enqueueLine(invalidPath, {
@@ -732,14 +819,28 @@ async function main() {
         const relativePath = join('assets', resource.kind, `${sha256}${extension}`);
         const absoluteDir = join(options.output, 'assets', resource.kind);
         const absolutePath = join(options.output, relativePath);
-        await mkdir(absoluteDir, { recursive: true });
-        await writeFile(absolutePath, body, { flag: 'wx' }).catch((error) => {
-          if (error.code !== 'EEXIST') throw error;
-        });
+        try {
+          await mkdir(absoluteDir, { recursive: true });
+          await writeFile(absolutePath, body, { flag: 'wx' }).catch((error) => {
+            if (error.code !== 'EEXIST') throw error;
+          });
+        } catch (error) {
+          budgetTracker.rollback(body.length);
+          throw error;
+        }
+        const detectedBuildIds = resource.kind === 'js' ? detectWorkshopBuildIds(body) : [];
+        for (const buildId of detectedBuildIds) workshopBuildIds.add(buildId);
+        if (workshopBuildIds.size > 1) {
+          await enqueueLine(riskPath, {
+            at: new Date().toISOString(),
+            kind: 'workshop-build-mismatch',
+            buildIds: [...workshopBuildIds].sort(),
+            url: redactUrl(resource.url),
+          });
+          requestStop(`Workshop build mismatch observed: ${[...workshopBuildIds].sort().join(', ')}`);
+        }
         captured += 1;
         totalBytes += body.length;
-        taskCaptured += 1;
-        taskBytes += body.length;
         await enqueueLine(manifestPath, {
           at: new Date().toISOString(),
           event: 'saved',
@@ -762,6 +863,7 @@ async function main() {
           targetUrl: redactUrl(resource.targetUrl || ''),
           captureMethod: 'response-body-for-observed-request',
           validation: 'accepted',
+          workshopBuildIds: detectedBuildIds,
         });
         if (options.ledgerPath) {
           await enqueueLine(options.ledgerPath, {
@@ -775,7 +877,8 @@ async function main() {
             size: body.length,
           });
         }
-        if ((options.maxAssets > 0 && taskCaptured >= options.maxAssets) || (options.maxTotalMiB > 0 && taskBytes >= options.maxTotalMiB * 1024 * 1024)) {
+        const budget = taskBudgetSnapshot();
+        if (budget.remainingAssets === 0 || budget.remainingBytes === 0) {
           requestStop('Capture budget reached');
         }
       } catch (error) {
@@ -836,6 +939,7 @@ async function main() {
         lastNetworkEventAt,
         targetEventCounts: targetEventCountSummary,
         taskBudget: taskBudgetSnapshot(),
+        workshopBuildIds: [...workshopBuildIds].sort(),
       })}\n`);
     }
     else if (trimmed.startsWith('mark ')) {
@@ -862,8 +966,7 @@ async function main() {
 
   const stopReason = await stopped;
   readline.close();
-  client.close();
-  const pendingOutcome = await waitForPending(pendingTasks);
+  const pendingOutcome = await closeAfterPending(client, pendingTasks);
   await writeChain;
   if (options.mode === 'discover') {
     const networkSummary = summarizeNetworkObservations(networkObservations, options.types, options.pageHosts);
@@ -898,6 +1001,7 @@ async function main() {
     networkEvents,
     lastNetworkEventAt,
     taskBudget: taskBudgetSnapshot(),
+    workshopBuildIds: [...workshopBuildIds].sort(),
     finalMarker: currentMarker,
     pendingOutcome,
   }, null, 2));

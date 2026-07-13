@@ -53,6 +53,57 @@ test('distinguishes approved, unapproved, and non-network URLs', () => {
     allowed: false,
     host: null,
   });
+  assert.deepEqual(scopeHost('wss://events.example.com/socket', ['events.example.com']), {
+    network: true,
+    allowed: true,
+    host: 'events.example.com',
+  });
+});
+
+test('keeps the marker from request start when the response arrives after a later marker', () => {
+  assert.equal(typeof collector.selectResourceMarker, 'function');
+  assert.equal(collector.selectResourceMarker({ marker: 'P2:table:mounted' }, 'P3:chart:mounted'), 'P2:table:mounted');
+  assert.equal(collector.selectResourceMarker({}, 'P3:chart:mounted'), 'P3:chart:mounted');
+});
+
+test('budget reservations cannot exceed a hard limit under concurrent completions', async () => {
+  assert.equal(typeof collector.createBudgetTracker, 'function');
+  const tracker = collector.createBudgetTracker(
+    { captured: 0, totalBytes: 0 },
+    { maxAssets: 1, maxTotalMiB: 1, maxAssetMiB: 50 },
+  );
+  const results = await Promise.all([
+    Promise.resolve().then(() => tracker.reserve(10)),
+    Promise.resolve().then(() => tracker.reserve(10)),
+  ]);
+  assert.equal(results.filter((result) => result.accepted).length, 1);
+  assert.deepEqual(tracker.snapshot(), {
+    captured: 1,
+    totalBytes: 10,
+    remainingAssets: 0,
+    remainingBytes: 1048566,
+  });
+});
+
+test('shutdown drains completed response work before closing CDP', async () => {
+  assert.equal(typeof collector.closeAfterPending, 'function');
+  const events = [];
+  const pending = new Set();
+  const task = new Promise((resolve) => setTimeout(resolve, 5))
+    .then(() => events.push('body-saved'))
+    .finally(() => pending.delete(task));
+  pending.add(task);
+  const outcome = await collector.closeAfterPending({ close: () => events.push('cdp-closed') }, pending, 100);
+  assert.equal(outcome, 'settled');
+  assert.deepEqual(events, ['body-saved', 'cdp-closed']);
+});
+
+test('detects Workshop build IDs from already captured JavaScript', () => {
+  assert.equal(typeof collector.detectWorkshopBuildIds, 'function');
+  assert.deepEqual(collector.detectWorkshopBuildIds(Buffer.from(`
+    "__wizard_sls_asset_version__": "6.464.38",
+    "__wizard_sls_asset_static_endpoint__": "/static/foundry-frontend-workshop/6.464.38/default/asset/workshop-app"
+  `)), ['6.464.38']);
 });
 
 test('bounds shutdown when a CDP request never settles', async () => {
@@ -190,4 +241,51 @@ test('skill workflow requires batch approval, cumulative budget, and merged deli
   ]) {
     assert.equal(combined.includes(requirement), true, `missing workflow requirement: ${requirement}`);
   }
+});
+
+test('skill defaults to operator-driven UI with Codex-managed capture and optional hard totals', async () => {
+  const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
+  const scopeReference = await readFile(new URL('../references/scope-config.md', import.meta.url), 'utf8');
+  const runbook = await readFile(new URL('../references/workshop-runbook.md', import.meta.url), 'utf8');
+  const combined = `${skill}\n${scopeReference}\n${runbook}`.toLowerCase();
+  for (const requirement of [
+    'codex manages the collector',
+    'operator controls the visible browser',
+    'hard cumulative limits are optional',
+    'do not save raw html',
+    'visible-and-covered',
+    'registered-not-visible',
+  ]) {
+    assert.equal(combined.includes(requirement), true, `missing low-intrusion workflow requirement: ${requirement}`);
+  }
+});
+
+test('Chinese README is a conversation-first Codex user manual', async () => {
+  const readme = await readFile(new URL('../../../README.md', import.meta.url), 'utf8').catch((error) => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (readme === null) return;
+  for (const requirement of [
+    '30 秒开始',
+    '$codex-cdp-static-assets-skill',
+    '你只操作可见 Chrome',
+    'Marker 已就绪',
+    '开始 P2:ObjectTable:edit-mounted',
+    '不需要预先知道 CDN',
+    '重试当前 Widget',
+    'Codex 应该返回',
+    '完成验收',
+  ]) {
+    assert.equal(readme.includes(requirement), true, `README missing Codex user guidance: ${requirement}`);
+  }
+  assert.equal(readme.includes('$capture-static-assets-cdp'), false, 'README must not advertise the retired invocation name');
+});
+
+test('skill identity matches the public repository name', async () => {
+  const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
+  const agent = await readFile(new URL('../agents/openai.yaml', import.meta.url), 'utf8');
+  assert.match(skill, /^---\nname: codex-cdp-static-assets-skill\n/m);
+  assert.equal(agent.includes('$codex-cdp-static-assets-skill'), true);
+  assert.equal(agent.includes('$capture-static-assets-cdp'), false);
 });

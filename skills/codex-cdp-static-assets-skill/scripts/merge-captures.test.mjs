@@ -48,3 +48,21 @@ test('merges capture runs by SHA-256 and preserves aggregate evidence', async ()
   assert.deepEqual(mergedManifest.find((item) => item.sha256 === 'same').markers, ['P0', 'P1']);
   assert.equal((await readFile(join(output, 'risk-events.ndjson'), 'utf8')).includes('api.example.com'), true);
 });
+
+test('refuses to merge capture runs from different known Workshop builds', async () => {
+  const { mergeCaptureDirectories } = await import(new URL('./merge-captures.mjs', import.meta.url));
+  const root = await mkdtemp(join(tmpdir(), 'merge-captures-builds-'));
+  const run1 = join(root, 'run-1');
+  const run2 = join(root, 'run-2');
+  const output = join(root, 'merged');
+  await mkdir(run1, { recursive: true });
+  await mkdir(run2, { recursive: true });
+  await writeFile(join(run1, 'summary.json'), JSON.stringify({ workshopBuildIds: ['6.464.38'] }));
+  await writeFile(join(run2, 'summary.json'), JSON.stringify({ workshopBuildIds: ['6.465.0'] }));
+
+  await assert.rejects(
+    mergeCaptureDirectories([run1, run2], output),
+    /Workshop build mismatch/,
+  );
+  assert.equal(await access(output).then(() => true, () => false), false);
+});

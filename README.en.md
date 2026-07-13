@@ -9,8 +9,9 @@ An authorization-first Codex skill and Node.js collector for recording static as
 - Runs a **discovery** pass that records metadata for every naturally observed network host, classifies static and network-only hosts, and never reads response bodies.
 - Requires an explicit reviewed scope before **capture** reads any response body.
 - Generates an unapproved `scope-candidates.json` for one batch review instead of serial host prompts.
-- Enforces count and byte limits across continuation runs with an append-only ledger.
+- Records count and byte usage across continuation runs with an append-only ledger; hard cumulative limits are optional while the per-resource guard remains.
 - Merges run directories offline by SHA-256 for a deduplicated delivery.
+- Detects Workshop Build IDs in already saved JavaScript and rejects known cross-build merges.
 - Reads only completed browser requests with `Network.getResponseBody`.
 - Attaches to pages, iframes, workers, shared workers, and service workers.
 - Stores accepted assets by locally calculated SHA-256.
@@ -29,22 +30,30 @@ This tool is designed for environments where you have written authorization and 
 
 ```bash
 npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
-  --skill capture-static-assets-cdp \
+  --skill codex-cdp-static-assets-skill \
   --agent codex \
   --global \
   --yes
 ```
 
-The installer discovers the complete skill under `skills/capture-static-assets-cdp/`, including `SKILL.md`, scripts, and references. Start a new Codex conversation and invoke it with `$capture-static-assets-cdp`.
+The installer discovers the complete skill under `skills/codex-cdp-static-assets-skill/`, including `SKILL.md`, scripts, and references. Start a new Codex conversation and invoke it with `$codex-cdp-static-assets-skill`.
+
+## Default Operator Model
+
+- The operator uses only the visible Chrome UI to create the test module, add widgets, and open configuration or preview states.
+- Codex starts and monitors the collector, enters markers, stops, audits, and merges runs.
+- The operator reports short checkpoints in chat and does not need to type terminal commands.
+- The collector does not click, inspect the DOM, execute page scripts, save raw HTML, or retain API bodies.
 
 ## Workflow
 
 1. Start visible Chrome with an isolated profile, log in, close unrelated tabs, and leave one `about:blank` tab.
-2. Start discovery with a page-only scope, then open the target in that same visible tab.
-3. Review the complete network inventory and approve one exact-host scope batch.
+2. Start discovery with a page-only scope for the empty Workshop shell and baseline navigation, then open the target in that same visible tab.
+3. Review the baseline network inventory and approve one exact-host scope batch.
 4. Put static hosts in `assetHosts` and approved API, identity, telemetry, and image hosts in `approvedNetworkHosts`.
-5. Reuse one `--ledger` across strict continuation runs while retaining the original total limits.
-6. Audit each run, merge runs offline, and audit the deduplicated delivery.
+5. The operator exercises visible widgets in small batches while Codex sets request-time markers. Review and retry only the current widget if a new host appears.
+6. Reuse one `--ledger` for every strict continuation run. Set `maxAssets` and `maxTotalMiB` to `0` for record-only tracking.
+7. Audit each run, merge runs offline, and audit the deduplicated delivery.
 
 Start Chrome:
 
@@ -70,7 +79,7 @@ Example discovery scope, `discovery-scope.json`:
 Discover every natural network host without reading bodies:
 
 ```bash
-node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
+node skills/codex-cdp-static-assets-skill/scripts/capture-static-assets.mjs \
   --mode discover \
   --scope ./discovery-scope.json \
   --endpoint http://127.0.0.1:9222 \
@@ -80,44 +89,44 @@ node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
 After batch review, use a capture scope containing exact `assetHosts` and `approvedNetworkHosts`:
 
 ```bash
-node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
+node skills/codex-cdp-static-assets-skill/scripts/capture-static-assets.mjs \
   --mode capture \
   --scope ./capture-scope.json \
   --endpoint http://127.0.0.1:9222 \
   --ledger ./task-ledger.ndjson \
   --output ./authorized-assets-run-1
 
-node skills/capture-static-assets-cdp/scripts/audit-capture.mjs ./authorized-assets-run-1
+node skills/codex-cdp-static-assets-skill/scripts/audit-capture.mjs ./authorized-assets-run-1
 
-node skills/capture-static-assets-cdp/scripts/merge-captures.mjs \
+node skills/codex-cdp-static-assets-skill/scripts/merge-captures.mjs \
   --output ./authorized-assets-merged \
   ./authorized-assets-run-1 ./authorized-assets-run-2
 
-node skills/capture-static-assets-cdp/scripts/audit-capture.mjs ./authorized-assets-merged
+node skills/codex-cdp-static-assets-skill/scripts/audit-capture.mjs ./authorized-assets-merged
 ```
 
-See [scope configuration](skills/capture-static-assets-cdp/references/scope-config.md), [Workshop runbook](skills/capture-static-assets-cdp/references/workshop-runbook.md), and [CDP boundaries](skills/capture-static-assets-cdp/references/cdp-boundaries.md) for the full operating model.
+See [scope configuration](skills/codex-cdp-static-assets-skill/references/scope-config.md), [Workshop runbook](skills/codex-cdp-static-assets-skill/references/workshop-runbook.md), and [CDP boundaries](skills/codex-cdp-static-assets-skill/references/cdp-boundaries.md) for the full operating model.
 
 ## Output
 
 - `observed-hosts.json`: discovery-only host evidence
 - `observed-network-hosts.json`: complete network-host evidence including API, identity, telemetry, and image requests
 - `scope-candidates.json`: exact unapproved candidates for batch review
-- `task-ledger.ndjson`: cumulative task budget evidence
+- `task-ledger.ndjson`: cumulative retained-resource count and byte evidence
 - `manifest.ndjson`: accepted assets and local content hashes
 - `invalid-assets.ndjson`: rejected content or budget events
 - `risk-events.ndjson`: scope and status-stop events
 - `asset-audit.json`: offline integrity report
-- `summary.json`: run-level outcome and counters
-- `merge-summary.json`: deduplicated multi-run summary
+- `summary.json`: run-level outcome, counters, and Workshop Build IDs detected in saved JavaScript
+- `merge-summary.json`: deduplicated multi-run summary; known Build mismatches are rejected
 
 ## Validation
 
 ```bash
 node --test \
-  skills/capture-static-assets-cdp/scripts/capture-static-assets.test.mjs \
-  skills/capture-static-assets-cdp/scripts/audit-capture.test.mjs \
-  skills/capture-static-assets-cdp/scripts/merge-captures.test.mjs
+  skills/codex-cdp-static-assets-skill/scripts/capture-static-assets.test.mjs \
+  skills/codex-cdp-static-assets-skill/scripts/audit-capture.test.mjs \
+  skills/codex-cdp-static-assets-skill/scripts/merge-captures.test.mjs
 ```
 
 ## License

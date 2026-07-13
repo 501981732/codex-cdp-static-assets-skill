@@ -31,6 +31,11 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   if (!Array.isArray(inputDirectories) || inputDirectories.length < 1) throw new Error('Provide at least one capture directory');
   const inputs = inputDirectories.map((input) => resolve(input));
   const output = resolve(outputDirectory);
+  const inputSummaries = await Promise.all(inputs.map((input) => readJson(join(input, 'summary.json'))));
+  const knownWorkshopBuildIds = [...new Set(inputSummaries.flatMap((summary) => summary?.workshopBuildIds || []))].sort();
+  if (knownWorkshopBuildIds.length > 1) {
+    throw new Error(`Workshop build mismatch: ${knownWorkshopBuildIds.join(', ')}`);
+  }
   await mkdir(output, { recursive: false });
   await mkdir(join(output, 'assets'), { recursive: true });
 
@@ -41,10 +46,10 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   const summaries = [];
   let savedEvents = 0;
 
-  for (const input of inputs) {
+  for (const [index, input] of inputs.entries()) {
     const sourceRun = basename(input);
     const manifest = await readNdjson(join(input, 'manifest.ndjson'));
-    const summary = await readJson(join(input, 'summary.json'));
+    const summary = inputSummaries[index];
     if (summary) summaries.push({ sourceRun, ...summary });
     risks.push(...(await readNdjson(join(input, 'risk-events.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
     invalid.push(...(await readNdjson(join(input, 'invalid-assets.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
@@ -96,6 +101,7 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
     stopReasons: summaries.map((entry) => ({ sourceRun: entry.sourceRun, reason: entry.stopReason })),
     riskEvents: risks.length,
     invalidEvents: invalid.length,
+    workshopBuildIds: knownWorkshopBuildIds,
   };
 
   await writeFile(join(output, 'manifest.ndjson'), ndjson(mergedManifest));

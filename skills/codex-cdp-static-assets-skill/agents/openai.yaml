@@ -1,0 +1,4 @@
+interface:
+  display_name: "合规 CDP 静态资源采集"
+  short_description: "被动记录浏览器自然加载的 JS、CSS 与其他静态资源"
+  default_prompt: "使用 $codex-cdp-static-assets-skill 在授权范围内采集当前 Chrome 会话自然加载的静态资源。请由我操作可见页面，你负责启动和监控采集器、根据我的聊天检查点写 Marker、执行停止条件、审计与合并；不要自动点击、读取 DOM、执行页面脚本或保存 API/原始 HTML 正文。"
