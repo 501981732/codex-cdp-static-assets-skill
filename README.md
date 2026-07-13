@@ -25,11 +25,14 @@
 ## 作为 Codex Skill 安装
 
 ```bash
-git clone https://github.com/501981732/codex-cdp-static-assets-skill.git \
-  "$HOME/.codex/skills/capture-static-assets-cdp"
+npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
+  --skill capture-static-assets-cdp \
+  --agent codex \
+  --global \
+  --yes
 ```
 
-之后在 Codex 对话中调用 `$capture-static-assets-cdp`。
+安装器会从 `skills/capture-static-assets-cdp/` 发现完整技能目录，包括 `SKILL.md`、脚本和参考文档。之后在 Codex 新对话中调用 `$capture-static-assets-cdp`。
 
 ## 标准流程
 
@@ -64,7 +67,7 @@ git clone https://github.com/501981732/codex-cdp-static-assets-skill.git \
 发现自然加载的资源域名，不读取正文：
 
 ```bash
-node scripts/capture-static-assets.mjs \
+node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
   --mode discover \
   --scope ./discovery-scope.json \
   --endpoint http://127.0.0.1:9222 \
@@ -74,16 +77,16 @@ node scripts/capture-static-assets.mjs \
 审核并补充 `capture-scope.json` 中的精确 `assetHosts` 后：
 
 ```bash
-node scripts/capture-static-assets.mjs \
+node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
   --mode capture \
   --scope ./capture-scope.json \
   --endpoint http://127.0.0.1:9222 \
   --output ./authorized-assets
 
-node scripts/audit-capture.mjs ./authorized-assets
+node skills/capture-static-assets-cdp/scripts/audit-capture.mjs ./authorized-assets
 ```
 
-完整规则见 [Scope 配置](references/scope-config.md)、[Workshop 操作手册](references/workshop-runbook.md) 与 [CDP 边界](references/cdp-boundaries.md)。
+完整规则见 [Scope 配置](skills/capture-static-assets-cdp/references/scope-config.md)、[Workshop 操作手册](skills/capture-static-assets-cdp/references/workshop-runbook.md) 与 [CDP 边界](skills/capture-static-assets-cdp/references/cdp-boundaries.md)。
 
 ## 输出文件
 
@@ -97,7 +100,9 @@ node scripts/audit-capture.mjs ./authorized-assets
 ## 验证
 
 ```bash
-node --test scripts/capture-static-assets.test.mjs scripts/audit-capture.test.mjs
+node --test \
+  skills/capture-static-assets-cdp/scripts/capture-static-assets.test.mjs \
+  skills/capture-static-assets-cdp/scripts/audit-capture.test.mjs
 ```
 
 ## 许可证

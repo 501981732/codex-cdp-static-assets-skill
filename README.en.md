@@ -25,11 +25,14 @@ This tool is designed for environments where you have written authorization and 
 ## Install as a Codex Skill
 
 ```bash
-git clone https://github.com/501981732/codex-cdp-static-assets-skill.git \
-  "$HOME/.codex/skills/capture-static-assets-cdp"
+npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
+  --skill capture-static-assets-cdp \
+  --agent codex \
+  --global \
+  --yes
 ```
 
-Then invoke it in Codex with `$capture-static-assets-cdp`.
+The installer discovers the complete skill under `skills/capture-static-assets-cdp/`, including `SKILL.md`, scripts, and references. Start a new Codex conversation and invoke it with `$capture-static-assets-cdp`.
 
 ## Workflow
 
@@ -64,7 +67,7 @@ Example discovery scope, `discovery-scope.json`:
 Discover hosts without reading bodies:
 
 ```bash
-node scripts/capture-static-assets.mjs \
+node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
   --mode discover \
   --scope ./discovery-scope.json \
   --endpoint http://127.0.0.1:9222 \
@@ -74,16 +77,16 @@ node scripts/capture-static-assets.mjs \
 After review, use a capture scope containing exact `assetHosts` and run:
 
 ```bash
-node scripts/capture-static-assets.mjs \
+node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
   --mode capture \
   --scope ./capture-scope.json \
   --endpoint http://127.0.0.1:9222 \
   --output ./authorized-assets
 
-node scripts/audit-capture.mjs ./authorized-assets
+node skills/capture-static-assets-cdp/scripts/audit-capture.mjs ./authorized-assets
 ```
 
-See [scope configuration](references/scope-config.md), [Workshop runbook](references/workshop-runbook.md), and [CDP boundaries](references/cdp-boundaries.md) for the full operating model.
+See [scope configuration](skills/capture-static-assets-cdp/references/scope-config.md), [Workshop runbook](skills/capture-static-assets-cdp/references/workshop-runbook.md), and [CDP boundaries](skills/capture-static-assets-cdp/references/cdp-boundaries.md) for the full operating model.
 
 ## Output
 
@@ -97,7 +100,9 @@ See [scope configuration](references/scope-config.md), [Workshop runbook](refere
 ## Validation
 
 ```bash
-node --test scripts/capture-static-assets.test.mjs scripts/audit-capture.test.mjs
+node --test \
+  skills/capture-static-assets-cdp/scripts/capture-static-assets.test.mjs \
+  skills/capture-static-assets-cdp/scripts/audit-capture.test.mjs
 ```
 
 ## License
