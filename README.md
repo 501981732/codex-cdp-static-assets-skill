@@ -25,7 +25,7 @@
 ## 作为 Codex Skill 安装
 
 ```bash
-git clone https://github.com/501981732/capture-static-assets-cdp.git \
+git clone https://github.com/501981732/codex-cdp-static-assets-skill.git \
   "$HOME/.codex/skills/capture-static-assets-cdp"
 ```
 

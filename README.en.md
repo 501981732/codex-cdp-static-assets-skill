@@ -25,7 +25,7 @@ This tool is designed for environments where you have written authorization and 
 ## Install as a Codex Skill
 
 ```bash
-git clone https://github.com/501981732/capture-static-assets-cdp.git \
+git clone https://github.com/501981732/codex-cdp-static-assets-skill.git \
   "$HOME/.codex/skills/capture-static-assets-cdp"
 ```
 
