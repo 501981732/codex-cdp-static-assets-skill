@@ -6,8 +6,11 @@
 
 ## 能力边界
 
-- 先运行 **发现模式**：只记录自然出现的静态资源域名，不读取响应正文。
+- 先运行 **发现模式**：记录所有自然出现的网络主机元数据，并区分静态资源与网络通信主机，不读取响应正文。
 - 只有人工审核并写入 Scope 后，**严格采集模式** 才读取已完成请求的正文。
+- 自动生成未批准的 `scope-candidates.json`，支持整份 Scope 一次性审核，而不是逐个域名反复确认。
+- 使用 append-only ledger 跨轮累计资源数和字节预算。
+- 多轮输出可离线按 SHA-256 去重合并。
 - 只使用 `Network.getResponseBody(requestId)` 读取浏览器已经收到的响应。
 - 覆盖页面、iframe、Worker、Shared Worker 和 Service Worker。
 - 以本地计算的 SHA-256 保存有效资源。
@@ -36,12 +39,12 @@ npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
 
 ## 标准流程
 
-1. 启动独立、可见的 Chrome，CDP 只监听 `127.0.0.1`。
-2. 使用仅含页面主域名的 Scope 运行发现模式。
-3. 审阅 `observed-hosts.json`，逐个确认自然出现的 CDN。
-4. 将获批 CDN 精确写入严格采集 Scope。
-5. 在正常可见 UI 操作前启动采集器。
-6. 结束后运行离线审计。
+1. 启动独立、可见的 Chrome，正常登录后关闭无关标签，只保留一个 `about:blank` 标签页。
+2. 使用仅含页面主域名的 Scope 启动发现模式，再在同一标签页打开目标页面。
+3. 审阅 `observed-network-hosts.json`、`observed-hosts.json` 和 `scope-candidates.json`，一次性批准整份精确主机清单。
+4. 将获批静态主机写入 `assetHosts`，API、身份、遥测和图片主机写入 `approvedNetworkHosts`。
+5. 严格采集的每个续跑目录都复用同一个 `--ledger`，Scope 中始终保留原始总预算。
+6. 每轮运行离线审计，最后使用 `merge-captures.mjs` 合并为去重交付目录。
 
 启动 Chrome：
 
@@ -64,7 +67,7 @@ npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
 }
 ```
 
-发现自然加载的资源域名，不读取正文：
+发现全部自然网络主机并生成未批准候选，不读取正文：
 
 ```bash
 node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
@@ -74,16 +77,23 @@ node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
   --output ./host-discovery
 ```
 
-审核并补充 `capture-scope.json` 中的精确 `assetHosts` 后：
+批量审核并补充 `capture-scope.json` 中的精确 `assetHosts` 与 `approvedNetworkHosts` 后：
 
 ```bash
 node skills/capture-static-assets-cdp/scripts/capture-static-assets.mjs \
   --mode capture \
   --scope ./capture-scope.json \
   --endpoint http://127.0.0.1:9222 \
-  --output ./authorized-assets
+  --ledger ./task-ledger.ndjson \
+  --output ./authorized-assets-run-1
 
-node skills/capture-static-assets-cdp/scripts/audit-capture.mjs ./authorized-assets
+node skills/capture-static-assets-cdp/scripts/audit-capture.mjs ./authorized-assets-run-1
+
+node skills/capture-static-assets-cdp/scripts/merge-captures.mjs \
+  --output ./authorized-assets-merged \
+  ./authorized-assets-run-1 ./authorized-assets-run-2
+
+node skills/capture-static-assets-cdp/scripts/audit-capture.mjs ./authorized-assets-merged
 ```
 
 完整规则见 [Scope 配置](skills/capture-static-assets-cdp/references/scope-config.md)、[Workshop 操作手册](skills/capture-static-assets-cdp/references/workshop-runbook.md) 与 [CDP 边界](skills/capture-static-assets-cdp/references/cdp-boundaries.md)。
@@ -91,18 +101,23 @@ node skills/capture-static-assets-cdp/scripts/audit-capture.mjs ./authorized-ass
 ## 输出文件
 
 - `observed-hosts.json`：发现模式的域名证据
+- `observed-network-hosts.json`：包括 API、身份、遥测和图片请求在内的完整网络主机证据
+- `scope-candidates.json`：等待批量审核的精确主机候选，不代表自动批准
+- `task-ledger.ndjson`：跨轮累计预算账本
 - `manifest.ndjson`：有效资源与本地内容哈希
 - `invalid-assets.ndjson`：被质量或预算规则拒绝的资源
 - `risk-events.ndjson`：域名范围、状态码等风险事件
 - `asset-audit.json`：离线完整性审计结果
 - `summary.json`：本轮采集汇总
+- `merge-summary.json`：多轮去重合并汇总
 
 ## 验证
 
 ```bash
 node --test \
   skills/capture-static-assets-cdp/scripts/capture-static-assets.test.mjs \
-  skills/capture-static-assets-cdp/scripts/audit-capture.test.mjs
+  skills/capture-static-assets-cdp/scripts/audit-capture.test.mjs \
+  skills/capture-static-assets-cdp/scripts/merge-captures.test.mjs
 ```
 
 ## 许可证

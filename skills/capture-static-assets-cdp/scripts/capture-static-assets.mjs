@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
@@ -129,6 +129,96 @@ export function summarizeHostObservations(observations) {
     .sort((left, right) => left.host.localeCompare(right.host));
 }
 
+export function summarizeNetworkObservations(observations, capturedTypes = DEFAULT_TYPES, pageHosts = []) {
+  const hosts = new Map();
+  for (const observation of observations) {
+    const current = hosts.get(observation.host) || {
+      host: observation.host,
+      requests: 0,
+      staticKinds: new Set(),
+      resourceTypes: new Set(),
+      mimeTypes: new Set(),
+    };
+    current.requests += 1;
+    if (observation.kind && capturedTypes.has(observation.kind)) current.staticKinds.add(observation.kind);
+    if (observation.resourceType) current.resourceTypes.add(observation.resourceType);
+    if (observation.mimeType) current.mimeTypes.add(observation.mimeType);
+    hosts.set(observation.host, current);
+  }
+  const pageHostSet = new Set(pageHosts);
+  const summarizedHosts = [...hosts.values()]
+    .map((item) => ({
+      host: item.host,
+      requests: item.requests,
+      role: item.staticKinds.size ? 'asset' : 'network-only',
+      staticKinds: [...item.staticKinds].sort(),
+      resourceTypes: [...item.resourceTypes].sort(),
+      mimeTypes: [...item.mimeTypes].sort(),
+    }))
+    .sort((left, right) => left.host.localeCompare(right.host));
+  return {
+    hosts: summarizedHosts,
+    scopeCandidates: {
+      assetHosts: summarizedHosts.filter((item) => item.role === 'asset' && !pageHostSet.has(item.host)).map((item) => item.host),
+      approvedNetworkHosts: summarizedHosts.filter((item) => item.role === 'network-only' && !pageHostSet.has(item.host)).map((item) => item.host),
+    },
+  };
+}
+
+export function summarizeLedgerEntries(entries, limits, caseId) {
+  let captured = 0;
+  let totalBytes = 0;
+  for (const entry of entries) {
+    if (entry.caseId !== caseId) throw new Error(`Task ledger caseId mismatch: expected ${caseId || 'null'}`);
+    if (entry.event !== 'saved') continue;
+    captured += 1;
+    totalBytes += Number(entry.size) || 0;
+  }
+  const maximumBytes = limits.maxTotalMiB > 0 ? limits.maxTotalMiB * 1024 * 1024 : null;
+  return {
+    captured,
+    totalBytes,
+    remainingAssets: limits.maxAssets > 0 ? Math.max(0, limits.maxAssets - captured) : null,
+    remainingBytes: maximumBytes === null ? null : Math.max(0, maximumBytes - totalBytes),
+  };
+}
+
+export function isIgnorableTarget(info) {
+  try {
+    const protocol = new URL(info?.url || '').protocol;
+    return ['chrome-extension:', 'devtools:', 'chrome:'].includes(protocol);
+  } catch {
+    return false;
+  }
+}
+
+export function findPageTargetIssues(targetInfos, pageHosts) {
+  const pages = targetInfos.filter((info) => info.type === 'page' && !isIgnorableTarget(info));
+  const networkPages = pages.filter((info) => scopeHost(info.url, pageHosts).network);
+  const issues = networkPages
+    .filter((info) => !scopeHost(info.url, pageHosts).allowed)
+    .map((info) => ({ kind: 'unapproved-page-target', targetId: info.targetId, url: redactUrl(info.url) }));
+  if (networkPages.length > 1) issues.push({ kind: 'multiple-page-targets', count: networkPages.length });
+  return issues;
+}
+
+async function readLedgerEntries(path) {
+  if (!path) return [];
+  try {
+    const content = await readFile(path, 'utf8');
+    return content.split('\n').filter(Boolean).map((line, index) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        throw new Error(`Invalid task ledger JSON on line ${index + 1}`);
+      }
+    });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
 export async function waitForPending(tasks, timeoutMs = 2_000) {
   let timer;
   const outcome = await Promise.race([
@@ -154,6 +244,7 @@ Scope:
 Options:
   --endpoint URL          Loopback DevTools endpoint (default: http://127.0.0.1:9222)
   --output DIR            Output directory (default: timestamped directory)
+  --ledger FILE           Append-only task budget ledger shared across capture runs
   --types LIST            js,css,wasm,font,image (default: js,css,wasm,font)
   --duration-min N        Stop after N minutes; 0 waits for quit/Ctrl-C (default: 0)
   --max-resource-mb N     Maximum decoded body size per resource (default: 50)
@@ -178,6 +269,7 @@ function parseArgs(argv) {
     allowHosts: [],
     mode: 'capture',
     scopePath: null,
+    ledgerPath: null,
     durationMin: 0,
     maxResourceMb: 50,
     maxAssets: 0,
@@ -197,6 +289,7 @@ function parseArgs(argv) {
     else if (arg === '--scope') options.scopePath = resolve(next());
     else if (arg === '--endpoint') options.endpoint = next();
     else if (arg === '--output') options.output = resolve(next());
+    else if (arg === '--ledger') options.ledgerPath = resolve(next());
     else if (arg === '--allow-host') options.allowHosts.push(next());
     else if (arg === '--types') options.types = new Set(next().split(',').map((item) => item.trim()).filter(Boolean));
     else if (arg === '--duration-min') options.durationMin = Number(next());
@@ -326,19 +419,49 @@ async function main() {
   }
   options = await applyScope(options);
 
-  await mkdir(options.output, { recursive: false });
-  await mkdir(join(options.output, 'assets'), { recursive: true });
+  const ledgerEntries = await readLedgerEntries(options.ledgerPath);
+  const priorTaskBudget = summarizeLedgerEntries(ledgerEntries, options.limits, options.caseId);
+  if (priorTaskBudget.remainingAssets === 0 || priorTaskBudget.remainingBytes === 0) {
+    throw new Error('Task budget is already exhausted');
+  }
+
+  const versionResponse = await fetch(new URL('/json/version', options.endpoint));
+  if (!versionResponse.ok) throw new Error(`DevTools endpoint returned HTTP ${versionResponse.status}`);
+  const version = await versionResponse.json();
+  const client = new CdpClient(version.webSocketDebuggerUrl);
+  await client.open();
+  const { targetInfos: initialTargetInfos } = await client.send('Target.getTargets');
+  const pageTargetIssues = findPageTargetIssues(initialTargetInfos, options.pageHosts);
+  if (pageTargetIssues.length) {
+    client.close();
+    throw new Error(`Page target preflight failed: ${JSON.stringify(pageTargetIssues)}`);
+  }
+
+  try {
+    await mkdir(options.output, { recursive: false });
+    await mkdir(join(options.output, 'assets'), { recursive: true });
+    if (options.ledgerPath) await mkdir(dirname(options.ledgerPath), { recursive: true });
+  } catch (error) {
+    client.close();
+    throw error;
+  }
   const manifestPath = join(options.output, 'manifest.ndjson');
   const markerPath = join(options.output, 'markers.ndjson');
   const riskPath = join(options.output, 'risk-events.ndjson');
   const invalidPath = join(options.output, 'invalid-assets.ndjson');
   const observationPath = join(options.output, 'observed-hosts.ndjson');
+  const networkObservationPath = join(options.output, 'observed-network-hosts.ndjson');
+  const targetPath = join(options.output, 'targets.ndjson');
   const startedAt = new Date().toISOString();
   let currentMarker = 'unmarked';
   let captured = 0;
   let bodyFailures = 0;
   let rejectedAssets = 0;
   let totalBytes = 0;
+  let taskCaptured = priorTaskBudget.captured;
+  let taskBytes = priorTaskBudget.totalBytes;
+  let networkEvents = 0;
+  let lastNetworkEventAt = null;
   let writeChain = Promise.resolve();
   let stopping = false;
   const resources = new Map();
@@ -347,17 +470,19 @@ async function main() {
   const targetInfo = new Map();
   const pendingTasks = new Set();
   const observations = [];
+  const networkObservations = [];
+  const targetEventCounts = new Map();
 
   const enqueueLine = (path, value) => {
     writeChain = writeChain.then(() => appendFile(path, `${JSON.stringify(value)}\n`));
     return writeChain;
   };
-
-  const versionResponse = await fetch(new URL('/json/version', options.endpoint));
-  if (!versionResponse.ok) throw new Error(`DevTools endpoint returned HTTP ${versionResponse.status}`);
-  const version = await versionResponse.json();
-  const client = new CdpClient(version.webSocketDebuggerUrl);
-  await client.open();
+  const taskBudgetSnapshot = () => ({
+    captured: taskCaptured,
+    totalBytes: taskBytes,
+    remainingAssets: options.maxAssets > 0 ? Math.max(0, options.maxAssets - taskCaptured) : null,
+    remainingBytes: options.maxTotalMiB > 0 ? Math.max(0, options.maxTotalMiB * 1024 * 1024 - taskBytes) : null,
+  });
 
   await writeFile(join(options.output, 'provenance.json'), JSON.stringify({
     startedAt,
@@ -372,6 +497,8 @@ async function main() {
     types: [...options.types],
     stopStatuses: [...options.stopStatuses],
     limits: options.limits,
+    ledger: options.ledgerPath,
+    priorTaskBudget,
     policy: 'natural-load-only',
   }, null, 2));
 
@@ -389,10 +516,18 @@ async function main() {
   };
 
   const setupSession = async (sessionId, info) => {
-    if (!sessionId || sessions.has(sessionId) || !TARGET_TYPES.has(info.type)) return;
+    if (!sessionId || sessions.has(sessionId) || !TARGET_TYPES.has(info.type) || isIgnorableTarget(info)) return;
     sessions.add(sessionId);
     attachedTargetIds.add(info.targetId);
     targetInfo.set(sessionId, info);
+    targetEventCounts.set(sessionId, 0);
+    await enqueueLine(targetPath, {
+      at: new Date().toISOString(),
+      event: 'attached',
+      targetId: info.targetId,
+      targetType: info.type,
+      url: redactUrl(info.url || ''),
+    });
     await client.send('Network.enable', {
       maxTotalBufferSize: 100 * 1024 * 1024,
       maxResourceBufferSize: options.maxResourceMb * 1024 * 1024,
@@ -402,6 +537,13 @@ async function main() {
   };
 
   client.on('Target.attachedToTarget', (params) => {
+    if (isIgnorableTarget(params.targetInfo)) {
+      track((async () => {
+        await client.send('Runtime.runIfWaitingForDebugger', {}, params.sessionId).catch(() => {});
+        await client.send('Target.detachFromTarget', { sessionId: params.sessionId }).catch(() => {});
+      })());
+      return;
+    }
     track(setupSession(params.sessionId, params.targetInfo).catch((error) => {
       enqueueLine(riskPath, { at: new Date().toISOString(), kind: 'session-setup-failed', targetType: params.targetInfo?.type, error: error.message });
     }));
@@ -409,7 +551,27 @@ async function main() {
 
   client.on('Target.targetInfoChanged', (params) => {
     for (const [sessionId, info] of targetInfo) {
-      if (info.targetId === params.targetInfo.targetId) targetInfo.set(sessionId, params.targetInfo);
+      if (info.targetId !== params.targetInfo.targetId) continue;
+      targetInfo.set(sessionId, params.targetInfo);
+      enqueueLine(targetPath, {
+        at: new Date().toISOString(),
+        event: 'changed',
+        targetId: params.targetInfo.targetId,
+        targetType: params.targetInfo.type,
+        url: redactUrl(params.targetInfo.url || ''),
+      });
+      if (params.targetInfo.type === 'page') {
+        const pageScope = scopeHost(params.targetInfo.url, options.pageHosts);
+        if (pageScope.network && !pageScope.allowed) {
+          enqueueLine(riskPath, {
+            at: new Date().toISOString(),
+            kind: 'page-navigation-out-of-scope',
+            host: pageScope.host,
+            url: redactUrl(params.targetInfo.url),
+          });
+          requestStop(`Page navigated outside approved page hosts: ${pageScope.host}`);
+        }
+      }
     }
   });
 
@@ -427,10 +589,15 @@ async function main() {
     const response = params.response;
     const kind = classifyResource({ type: params.type, mimeType: response.mimeType, url: response.url });
     const networkScope = scopeHost(response.url, options.approvedNetworkHosts);
+    if (networkScope.network) {
+      networkEvents += 1;
+      lastNetworkEventAt = new Date().toISOString();
+      targetEventCounts.set(sessionId, (targetEventCounts.get(sessionId) || 0) + 1);
+    }
 
     if (options.mode === 'discover') {
-      if (!kind || !options.types.has(kind) || !networkScope.network) return;
-      const observation = {
+      if (!networkScope.network) return;
+      const networkObservation = {
         at: new Date().toISOString(),
         host: networkScope.host,
         kind,
@@ -440,10 +607,14 @@ async function main() {
         resourceType: params.type,
         targetType: targetInfo.get(sessionId)?.type,
       };
-      observations.push(observation);
-      enqueueLine(observationPath, observation);
+      networkObservations.push(networkObservation);
+      enqueueLine(networkObservationPath, networkObservation);
+      if (kind && options.types.has(kind)) {
+        observations.push(networkObservation);
+        enqueueLine(observationPath, networkObservation);
+      }
       if (options.stopStatuses.has(Number(response.status))) {
-        enqueueLine(riskPath, { ...observation, kind: 'stop-status' });
+        enqueueLine(riskPath, { ...networkObservation, kind: 'stop-status' });
         requestStop(`HTTP ${response.status} observed during discovery`);
       }
       return;
@@ -536,8 +707,8 @@ async function main() {
         const sha256 = createHash('sha256').update(body).digest('hex');
         let validation = validateBody(resource.kind, body);
         if (validation.accepted && body.length > maxBytes) validation = { accepted: false, reason: 'asset-budget-exceeded' };
-        if (validation.accepted && options.maxAssets > 0 && captured >= options.maxAssets) validation = { accepted: false, reason: 'asset-count-budget-exceeded' };
-        if (validation.accepted && options.maxTotalMiB > 0 && totalBytes + body.length > options.maxTotalMiB * 1024 * 1024) {
+        if (validation.accepted && options.maxAssets > 0 && taskCaptured >= options.maxAssets) validation = { accepted: false, reason: 'asset-count-budget-exceeded' };
+        if (validation.accepted && options.maxTotalMiB > 0 && taskBytes + body.length > options.maxTotalMiB * 1024 * 1024) {
           validation = { accepted: false, reason: 'total-byte-budget-exceeded' };
         }
         if (!validation.accepted) {
@@ -567,6 +738,8 @@ async function main() {
         });
         captured += 1;
         totalBytes += body.length;
+        taskCaptured += 1;
+        taskBytes += body.length;
         await enqueueLine(manifestPath, {
           at: new Date().toISOString(),
           event: 'saved',
@@ -590,7 +763,19 @@ async function main() {
           captureMethod: 'response-body-for-observed-request',
           validation: 'accepted',
         });
-        if ((options.maxAssets > 0 && captured >= options.maxAssets) || (options.maxTotalMiB > 0 && totalBytes >= options.maxTotalMiB * 1024 * 1024)) {
+        if (options.ledgerPath) {
+          await enqueueLine(options.ledgerPath, {
+            at: new Date().toISOString(),
+            event: 'saved',
+            caseId: options.caseId,
+            run: basename(options.output),
+            marker: resource.marker,
+            kind: resource.kind,
+            sha256,
+            size: body.length,
+          });
+        }
+        if ((options.maxAssets > 0 && taskCaptured >= options.maxAssets) || (options.maxTotalMiB > 0 && taskBytes >= options.maxTotalMiB * 1024 * 1024)) {
           requestStop('Capture budget reached');
         }
       } catch (error) {
@@ -616,8 +801,7 @@ async function main() {
     flatten: true,
   });
 
-  const { targetInfos } = await client.send('Target.getTargets');
-  for (const info of targetInfos.filter((item) => TARGET_TYPES.has(item.type))) {
+  for (const info of initialTargetInfos.filter((item) => TARGET_TYPES.has(item.type) && !isIgnorableTarget(item))) {
     if (attachedTargetIds.has(info.targetId)) continue;
     try {
       const { sessionId } = await client.send('Target.attachToTarget', { targetId: info.targetId, flatten: true });
@@ -631,7 +815,29 @@ async function main() {
   readline.on('line', (line) => {
     const trimmed = line.trim();
     if (trimmed === 'quit') requestStop('interactive quit');
-    else if (trimmed === 'status') process.stdout.write(`${JSON.stringify({ mode: options.mode, captured, rejectedAssets, bodyFailures, totalBytes, observedHosts: observations.length, marker: currentMarker })}\n`);
+    else if (trimmed === 'status') {
+      const targetEventCountSummary = [...targetInfo.entries()].map(([sessionId, info]) => ({
+        targetId: info.targetId,
+        targetType: info.type,
+        url: redactUrl(info.url || ''),
+        events: targetEventCounts.get(sessionId) || 0,
+      }));
+      process.stdout.write(`${JSON.stringify({
+        mode: options.mode,
+        captured,
+        rejectedAssets,
+        bodyFailures,
+        totalBytes,
+        observedHosts: observations.length,
+        observedNetworkRequests: networkObservations.length,
+        marker: currentMarker,
+        attachedTargets: sessions.size,
+        networkEvents,
+        lastNetworkEventAt,
+        targetEventCounts: targetEventCountSummary,
+        taskBudget: taskBudgetSnapshot(),
+      })}\n`);
+    }
     else if (trimmed.startsWith('mark ')) {
       currentMarker = trimmed.slice(5).trim() || 'unmarked';
       enqueueLine(markerPath, { at: new Date().toISOString(), marker: currentMarker });
@@ -650,6 +856,7 @@ async function main() {
     assetHosts: options.assetHosts,
     approvedNetworkHosts: options.approvedNetworkHosts,
     types: [...options.types],
+    taskBudget: taskBudgetSnapshot(),
     note: 'Operate the browser normally; this collector does not navigate or refetch.',
   }, null, 2)}\n`);
 
@@ -659,9 +866,21 @@ async function main() {
   const pendingOutcome = await waitForPending(pendingTasks);
   await writeChain;
   if (options.mode === 'discover') {
+    const networkSummary = summarizeNetworkObservations(networkObservations, options.types, options.pageHosts);
     await writeFile(join(options.output, 'observed-hosts.json'), JSON.stringify({
       observedAt: startedAt,
       hosts: summarizeHostObservations(observations),
+    }, null, 2));
+    await writeFile(join(options.output, 'observed-network-hosts.json'), JSON.stringify({
+      observedAt: startedAt,
+      hosts: networkSummary.hosts,
+    }, null, 2));
+    await writeFile(join(options.output, 'scope-candidates.json'), JSON.stringify({
+      caseId: options.caseId,
+      pageHosts: options.pageHosts,
+      ...networkSummary.scopeCandidates,
+      approvalStatus: 'candidate-only',
+      note: 'Review ownership and purpose before copying candidates into an approved capture scope.',
     }, null, 2));
   }
   await writeFile(join(options.output, 'summary.json'), JSON.stringify({
@@ -673,6 +892,12 @@ async function main() {
     bodyFailures,
     totalBytes,
     observedHosts: observations.length,
+    observedStaticRequests: observations.length,
+    observedNetworkRequests: networkObservations.length,
+    attachedTargets: sessions.size,
+    networkEvents,
+    lastNetworkEventAt,
+    taskBudget: taskBudgetSnapshot(),
     finalMarker: currentMarker,
     pendingOutcome,
   }, null, 2));

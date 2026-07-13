@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
+import * as collector from './capture-static-assets.mjs';
+
 import {
   classifyResource,
   hostIsAllowed,
@@ -103,5 +105,89 @@ test('collector contains no active retrieval or page-driving CDP methods', async
     'CacheStorage.',
   ]) {
     assert.equal(source.includes(forbidden), false, `forbidden active method: ${forbidden}`);
+  }
+});
+
+test('discovery summarizes static and network-only hosts for batch approval', () => {
+  assert.equal(typeof collector.summarizeNetworkObservations, 'function');
+  const summary = collector.summarizeNetworkObservations([
+    { host: 'cdn.example.com', kind: 'js', mimeType: 'application/javascript', resourceType: 'Script' },
+    { host: 'api.example.com', kind: null, mimeType: 'application/json', resourceType: 'Fetch' },
+    { host: 'images.example.com', kind: 'image', mimeType: 'image/png', resourceType: 'Image' },
+  ], new Set(['js', 'css', 'wasm', 'font']), ['app.example.com']);
+
+  assert.deepEqual(summary.scopeCandidates, {
+    assetHosts: ['cdn.example.com'],
+    approvedNetworkHosts: ['api.example.com', 'images.example.com'],
+  });
+  assert.equal(summary.hosts.find((item) => item.host === 'api.example.com').role, 'network-only');
+});
+
+test('task ledger enforces one cumulative budget across capture runs', () => {
+  assert.equal(typeof collector.summarizeLedgerEntries, 'function');
+  const budget = collector.summarizeLedgerEntries([
+    { event: 'saved', caseId: 'CASE-1', size: 30 },
+    { event: 'saved', caseId: 'CASE-1', size: 20 },
+    { event: 'body-unavailable', caseId: 'CASE-1', size: 0 },
+  ], { maxAssets: 3, maxTotalMiB: 1, maxAssetMiB: 50 }, 'CASE-1');
+
+  assert.deepEqual(budget, {
+    captured: 2,
+    totalBytes: 50,
+    remainingAssets: 1,
+    remainingBytes: 1048526,
+  });
+  assert.throws(() => collector.summarizeLedgerEntries([
+    { event: 'saved', caseId: 'OTHER', size: 1 },
+  ], { maxAssets: 3, maxTotalMiB: 1, maxAssetMiB: 50 }, 'CASE-1'), /caseId/);
+});
+
+test('preflight identifies unrelated or excess page targets', () => {
+  assert.equal(typeof collector.findPageTargetIssues, 'function');
+  const issues = collector.findPageTargetIssues([
+    { targetId: '1', type: 'page', url: 'https://app.example.com/workshop' },
+    { targetId: '2', type: 'page', url: 'https://www.google.com/search?q=test' },
+    { targetId: '3', type: 'service_worker', url: 'chrome-extension://abc/background.js' },
+  ], ['app.example.com']);
+
+  assert.deepEqual(issues.map((item) => item.kind), ['unapproved-page-target', 'multiple-page-targets']);
+});
+
+test('extension targets are ignored instead of logged as attachment risks', () => {
+  assert.equal(typeof collector.isIgnorableTarget, 'function');
+  assert.equal(collector.isIgnorableTarget({ type: 'service_worker', url: 'chrome-extension://abc/background.js' }), true);
+  assert.equal(collector.isIgnorableTarget({ type: 'service_worker', url: 'https://app.example.com/sw.js' }), false);
+});
+
+test('collector validates and opens CDP before creating the output directory', async () => {
+  const source = await readFile(new URL('./capture-static-assets.mjs', import.meta.url), 'utf8');
+  const endpointFetch = source.indexOf("fetch(new URL('/json/version', options.endpoint))");
+  const outputCreation = source.indexOf('mkdir(options.output, { recursive: false })');
+  assert.notEqual(endpointFetch, -1);
+  assert.notEqual(outputCreation, -1);
+  assert.equal(endpointFetch < outputCreation, true);
+});
+
+test('status exposes target and network diagnostics', async () => {
+  const source = await readFile(new URL('./capture-static-assets.mjs', import.meta.url), 'utf8');
+  for (const field of ['attachedTargets', 'networkEvents', 'lastNetworkEventAt', 'targetEventCounts']) {
+    assert.equal(source.includes(field), true, `missing status diagnostic: ${field}`);
+  }
+});
+
+test('skill workflow requires batch approval, cumulative budget, and merged delivery', async () => {
+  const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
+  const scopeReference = await readFile(new URL('../references/scope-config.md', import.meta.url), 'utf8');
+  const runbook = await readFile(new URL('../references/workshop-runbook.md', import.meta.url), 'utf8');
+  const combined = `${skill}\n${scopeReference}\n${runbook}`;
+  for (const requirement of [
+    'scope-candidates.json',
+    'observed-network-hosts.json',
+    '--ledger',
+    'merge-captures.mjs',
+    'batch approval',
+    'log in before starting discovery',
+  ]) {
+    assert.equal(combined.includes(requirement), true, `missing workflow requirement: ${requirement}`);
   }
 });

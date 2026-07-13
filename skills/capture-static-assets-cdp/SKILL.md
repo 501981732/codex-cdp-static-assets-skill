@@ -20,7 +20,7 @@ Do not navigate, refresh, fetch, replay URLs, enumerate chunks, request sourcema
 
 ## Discover, approve, capture
 
-Launch visible Chrome and log in normally:
+Launch visible Chrome and log in normally. For authenticated applications, log in before starting discovery. After authentication, close unrelated tabs, keep one `about:blank` tab in the dedicated profile, start discovery, then navigate that same visible tab to the approved page.
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
@@ -29,7 +29,7 @@ Launch visible Chrome and log in normally:
   --user-data-dir="$HOME/.cdp-authorized-test-profile"
 ```
 
-First run discovery with only the approved page host. It records static-resource hosts naturally encountered during visible UI use; it never reads response bodies or approves a host:
+First run discovery with only the approved page host. It records every naturally observed HTTP(S) host as metadata, separately identifies static-resource hosts, and never reads response bodies or approves a host:
 
 ```bash
 node scripts/capture-static-assets.mjs \
@@ -38,7 +38,7 @@ node scripts/capture-static-assets.mjs \
   --output ./workshop-host-discovery
 ```
 
-Review `observed-hosts.json`. Add only approved CDNs to `assetHosts`; add other approved network endpoints, if needed for normal page use, to `approvedNetworkHosts`. Do not use broad CDN or vendor wildcards merely to avoid another review.
+Review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. The candidates separate `assetHosts` from network-only API, identity, telemetry, and image hosts. Perform one batch approval of the complete candidate list with the owner or SOC; never treat candidates as approval. Add approved static hosts to `assetHosts` and approved network-only hosts to `approvedNetworkHosts`. Do not use broad CDN or vendor wildcards merely to avoid review.
 
 Then run strict capture:
 
@@ -47,10 +47,13 @@ node scripts/capture-static-assets.mjs \
   --mode capture \
   --scope ./workshop-capture-scope.json \
   --endpoint http://127.0.0.1:9222 \
+  --ledger ./workshop-task-ledger.ndjson \
   --output ./authorized-static-assets
 ```
 
-Operate the browser through normal visible UI. Strict capture attaches to pages, iframes, workers, shared workers, and service workers, then saves observed JS, CSS, WASM, and fonts by SHA-256. It rejects empty bodies, all-zero placeholders, HTML returned as JS/CSS, invalid WASM/font magic, and configured size/count budgets. Add images only when explicitly in scope.
+Reuse the same `--ledger` for every continuation run and keep the original task limits in the Scope. The append-only ledger enforces the count and byte budget across runs, including duplicate responses, so do not decrement limits manually.
+
+Operate the browser through normal visible UI. Strict capture preflights visible page targets, attaches to pages, iframes, workers, shared workers, and service workers, then saves observed JS, CSS, WASM, and fonts by SHA-256. It ignores extension targets, rejects unrelated existing tabs, and reports attached targets, event counts, and the last network event through `status`. It rejects empty bodies, all-zero placeholders, HTML returned as JS/CSS, invalid WASM/font magic, and configured size/count budgets. Add images only when explicitly in scope.
 
 Use terminal markers to correlate components and assets:
 
@@ -63,17 +66,28 @@ quit
 
 Do not clear cache between components. Use one approved cold-profile run followed by at most one warm verification run when the scope requires it. The collector never triggers reload; perform any approved reload visibly in Chrome after capture starts.
 
-Run the offline integrity check after every capture:
+Run the offline integrity check after every capture. If strict capture stops on a newly observed host, review it, update the Scope only after approval, and start a new output directory with the same ledger. Never retry automatically.
 
 ```bash
 node scripts/audit-capture.mjs ./authorized-static-assets
+```
+
+After the approved runs finish, create one deduplicated offline delivery and audit it:
+
+```bash
+node scripts/merge-captures.mjs \
+  --output ./authorized-static-assets-merged \
+  ./authorized-static-assets-run-1 \
+  ./authorized-static-assets-run-2
+
+node scripts/audit-capture.mjs ./authorized-static-assets-merged
 ```
 
 ## Stop and report
 
 Stop immediately on `401`, `403`, `429`, authentication challenges, account warnings, unexpected writes, unapproved hosts, elevated `5xx`, or an SOC request. Do not retry automatically.
 
-Return the output directory and summarize `summary.json`, `risk-events.ndjson`, `invalid-assets.ndjson`, `asset-audit.json`, body failures, captured types, and component markers. State clearly that the result contains observed production artifacts, not complete source code or untriggered branches.
+Return the merged output directory and summarize `merge-summary.json`, task-ledger usage, `risk-events.ndjson`, `invalid-assets.ndjson`, `asset-audit.json`, body failures, captured types, and component markers. State clearly that the result contains observed production artifacts, not complete source code or untriggered branches.
 
 ## Common mistakes
 
@@ -81,6 +95,9 @@ Return the output directory and summarize `summary.json`, `risk-events.ndjson`, 
 |---|---|
 | Body unavailable from cache | Record metadata; do not refetch |
 | Unknown CDN | Run discovery, obtain approval, then add it to the Scope file |
+| API hosts appear one by one in capture | Discovery was incomplete; review `observed-network-hosts.json` and approve one candidate Scope batch |
+| Several continuation runs | Reuse one ledger and merge outputs offline by SHA-256 |
+| Unrelated browser tab | Close it before startup; target preflight must pass |
 | All-zero or HTML body | Leave it out of `assets/`; inspect `invalid-assets.ndjson` |
 | CDN host missing from scope | Pause and obtain scope approval |
 | User asks to avoid detection | Reframe as authorization, fixed limits, SOC visibility, and stop conditions |
