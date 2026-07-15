@@ -20,7 +20,7 @@ npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
 
 ## 默认 Chrome 登录态
 
-如果目标账号只能在日常使用的默认 Chrome 中登录，使用 Chrome 144+ 官方 `autoConnect`，不再要求 `127.0.0.1:9222` 或新建 Profile。
+目标账号使用日常默认 Chrome 的登录态，通过 Chrome 144+ 官方 `autoConnect` 连接。
 
 一次性配置：
 
@@ -42,7 +42,7 @@ codex mcp add chrome-devtools -- \
 
 `autoConnect` 可以看到该默认 Profile 的全部窗口。建议暂时关闭无关敏感页面；Skill 只选择唯一匹配授权域名的页面，不保存其他标签页的信息。
 
-Chrome 低于 144 时不能使用 `autoConnect`。此时只能使用授权方已有的 loopback CDP 会话或单独批准的采集 Profile，不能复制默认 Profile、Cookie、Token 或密码来绕过登录限制。
+Chrome 低于 144、MCP 工具不可用或企业策略禁止连接时，Skill 会直接暂停并报告缺少的条件。它不会启动或要求另一个浏览器会话，也不会复制 Profile、Cookie、Token 或密码来绕过登录限制。
 
 ## 30 秒开始
 
@@ -115,21 +115,6 @@ Codex 每轮审计无效正文、风险事件和 Ledger。全部完成后按 SHA
 - `merge-summary.json`：最终去重结果。
 
 结果是浏览器实际观察到的部署产物，不是原始源码，也不包含未触发分支、后端代码或未经授权的角色资源。
-
-## 兼容的 loopback 模式
-
-只有当浏览器已经暴露批准的 loopback CDP 时，才使用旧采集器：
-
-```bash
-node skills/codex-cdp-static-assets-skill/scripts/capture-static-assets.mjs \
-  --mode capture \
-  --scope ./capture-scope.json \
-  --endpoint http://127.0.0.1:9222 \
-  --ledger ./task-ledger.ndjson \
-  --output ./capture-run-1
-```
-
-不要因为 9222 不存在就自动启动第二个 Chrome Profile。默认 Chrome 场景应优先使用上面的 `autoConnect`。
 
 ## 验证
 

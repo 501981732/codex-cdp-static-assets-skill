@@ -14,7 +14,7 @@ import {
   scopeHost,
   summarizeLedgerEntries,
   validateBody,
-} from './capture-static-assets.mjs';
+} from './capture-core.mjs';
 
 function normalizeResourceType(value = '') {
   const normalized = value.toLowerCase();

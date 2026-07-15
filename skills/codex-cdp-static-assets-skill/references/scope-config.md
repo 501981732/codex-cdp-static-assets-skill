@@ -50,23 +50,15 @@ Add exact approved static hosts to `assetHosts`. Page hosts may serve same-origi
 
 Do not use broad CDN/vendor wildcards or allow-any. Stop on a new host and approve its exact hostname before a new run.
 
-Reuse one append-only ledger for every strict run:
-
-```bash
-node scripts/capture-static-assets.mjs --mode capture \
-  --scope ./capture-scope.json \
-  --ledger ./task-ledger.ndjson \
-  --output ./capture-run-1
-```
+Reuse one append-only Ledger for every strict run. Pass the same `--ledger` path to `import-mcp-response.mjs` for every approved response body.
 
 Hard cumulative limits are optional. `0` disables a retained asset-count or total-byte stop, but the ledger still records decoded bodies and rejects a mismatched `caseId`. Keep a nonzero per-resource guard. Retention limits do not replace an owner-defined request, traffic, or time ceiling.
 
 ## Cache Decision
 
-- Default Chrome: on Chrome 144+, prefer Chrome DevTools MCP `--autoConnect` with explicit approval at `chrome://inspect/#remote-debugging`. Select only the unique page matching `pageHosts`. The MCP can see all windows in the selected profile, so close unrelated sensitive pages when practical and never persist their metadata.
-- Loopback fallback: use `capture-static-assets.mjs` only when an approved loopback endpoint already exists. Do not launch another profile automatically because port 9222 is absent.
-- Both backends: accept body-unavailable gaps created by discovery or normal browser caching; record the gap and do not refetch.
-- Exception: a fresh capture profile requires owner approval when body completeness is necessary. Do not transfer cookies, tokens, passwords, or profile files, and do not run both profiles together.
+- On Chrome 144+, use Chrome DevTools MCP `--autoConnect` with explicit approval at `chrome://inspect/#remote-debugging`. Select only the unique page matching `pageHosts`. The MCP can see all windows in the selected profile, so close unrelated sensitive pages when practical and never persist their metadata.
+- Accept body-unavailable gaps created by discovery or normal browser caching; record the gap and do not refetch.
+- If prerequisites are unavailable, pause. Do not transfer cookies, tokens, passwords, or profile files or request another browser session.
 - Always: never clear cache, disable cache, bypass the Service Worker, or replay a resource URL.
 
 ## Outputs

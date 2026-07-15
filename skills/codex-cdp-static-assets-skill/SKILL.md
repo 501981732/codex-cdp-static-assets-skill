@@ -15,25 +15,19 @@ Codex must not navigate, refresh, click, inspect the DOM, execute page scripts, 
 
 1. Confirm case ID, test account, page host, time window, test module, allowed UI actions, asset types, owner traffic ceiling, stop contact, and autosave authorization.
 2. Read [references/scope-config.md](references/scope-config.md). For component-heavy pages, read [references/workshop-runbook.md](references/workshop-runbook.md).
-3. Choose the connection backend below. Never transfer cookies, tokens, passwords, or profile files.
+3. Never transfer cookies, tokens, passwords, or profile files.
 
 For authenticated applications, log in before discovery. Reuse authenticated state in place; never export it from Chrome.
 
-## Connection choice
-
-### A. Default Chrome via autoConnect (preferred)
+## Chrome connection
 
 Use this when the account is already signed in to the user's normal Chrome. It requires Chrome 144+ and Chrome DevTools MCP configured with `--autoConnect`. Read [references/mcp-autoconnect.md](references/mcp-autoconnect.md) before operating.
 
-Do not probe `127.0.0.1:9222` first when `list_pages`, `select_page`, `list_network_requests`, and `get_network_request` are available. Ask the operator to enable the remote debugging server at `chrome://inspect/#remote-debugging` and approve Chrome's connection dialog.
+Require `list_pages`, `select_page`, `list_network_requests`, and `get_network_request`. Ask the operator to enable the remote debugging server at `chrome://inspect/#remote-debugging` and approve Chrome's connection dialog.
 
 The MCP can see all windows in the selected default profile. Recommend closing unrelated sensitive pages. Use `list_pages` only in memory, select the unique page matching `pageHosts`, and never persist unrelated page metadata.
 
-### B. Loopback collector (fallback)
-
-Use `capture-static-assets.mjs` only when the operator already has an approved loopback CDP endpoint. Attach to the unique page matching `pageHosts`; ignore unrelated targets. Do not launch a new profile automatically when attachment fails.
-
-Chrome below 144 cannot use `autoConnect`. Chrome 136+ also ignores a remote-debugging port for the default data directory. In that case pause for an owner-approved connection choice; do not work around login controls.
+If Chrome is below 144, the MCP tools are unavailable, or enterprise policy blocks the connection, pause and report the exact prerequisite. Do not launch or request another browser session and do not work around login controls.
 
 ## autoConnect workflow
 
@@ -45,10 +39,6 @@ Chrome below 144 cannot use `autoConnect`. Chrome 136+ also ignores a remote-deb
 6. Audit every run, merge once, then audit the merged directory.
 
 `list_network_requests` and `get_network_request` inspect Chrome's local Network record; they must not create a new HTTP request. Do not use `navigate_page`, `evaluate_script`, `click`, or URL-fetching tools in this workflow.
-
-## Loopback workflow
-
-Run discovery once, strict baseline once, then component batches only when baseline proves lazy loading. Keep one collector running per batch and let the operator drive the page. See [references/cdp-boundaries.md](references/cdp-boundaries.md) for commands and limitations.
 
 ## Stop and report
 

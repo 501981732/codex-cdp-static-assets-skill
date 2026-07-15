@@ -77,7 +77,7 @@ To record an unavailable body, omit `--body` and `--delete-body` while keeping t
 - Ingest a batch before navigating away; do not rely on old entries remaining indefinitely.
 - Reading a completed response body through MCP is local browser inspection and should not issue another server request.
 - Body reads can still fail because of cache eviction, renderer lifecycle, opaque responses, or tool limits. Record the gap.
-- Default-profile access has a broader local privacy surface than the loopback collector because the MCP can enumerate all windows. Minimize open sensitive pages and keep target selection exact.
+- Default-profile access lets the MCP enumerate all windows in that profile. Minimize open sensitive pages and keep target selection exact.
 
 After each run:
 

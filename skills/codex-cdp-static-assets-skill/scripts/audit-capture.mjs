@@ -5,7 +5,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { relative, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { validateBody } from './capture-static-assets.mjs';
+import { validateBody } from './capture-core.mjs';
 
 async function walk(directory) {
   const files = [];

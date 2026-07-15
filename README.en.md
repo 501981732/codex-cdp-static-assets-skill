@@ -20,7 +20,7 @@ Start a new Codex task after installation or update.
 
 ## Reuse the Default Chrome Login
 
-When the account signs in only through the user's normal Chrome, use the official Chrome 144+ `autoConnect` path instead of port 9222 or a new profile.
+The target account keeps its authenticated state in the user's normal Chrome and connects through the official Chrome 144+ `autoConnect` path.
 
 One-time MCP setup:
 
@@ -42,7 +42,7 @@ Restart Codex. In the already signed-in default Chrome:
 
 `autoConnect` can access every window in the selected default profile. Close unrelated sensitive pages when practical. The Skill selects only the unique page matching the authorized hostname and does not persist other tabs.
 
-Chrome versions below 144 cannot use `autoConnect`. Use an already approved loopback CDP session or a separately authorized capture profile; never copy the default profile, cookies, tokens, or passwords to bypass login controls.
+If Chrome is below 144, the MCP tools are unavailable, or enterprise policy blocks the connection, the Skill pauses and reports the missing prerequisite. It does not launch or request another browser session, and never copies profiles, cookies, tokens, or passwords to bypass login controls.
 
 ## Quick Start
 
@@ -91,21 +91,6 @@ Stop without automatic retry on `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA
 - `merge-summary.json` for the final deduplicated result
 
 The result contains observed deployed artifacts, not original source, backend code, unauthorized roles, or untriggered branches.
-
-## Loopback Compatibility
-
-Use the bundled event collector only when Chrome already exposes an approved loopback CDP endpoint:
-
-```bash
-node skills/codex-cdp-static-assets-skill/scripts/capture-static-assets.mjs \
-  --mode capture \
-  --scope ./capture-scope.json \
-  --endpoint http://127.0.0.1:9222 \
-  --ledger ./task-ledger.ndjson \
-  --output ./capture-run-1
-```
-
-Do not launch a second Chrome profile merely because port 9222 is absent. Prefer `autoConnect` for the default Chrome case.
 
 ## Validation
 
