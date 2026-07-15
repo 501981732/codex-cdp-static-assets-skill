@@ -159,6 +159,16 @@ test('collector contains no active retrieval or page-driving CDP methods', async
   }
 });
 
+test('skill prefers explicit autoConnect authorization for the default Chrome profile', async () => {
+  const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
+  assert.match(skill, /--autoConnect/);
+  assert.match(skill, /chrome:\/\/inspect\/#remote-debugging/);
+  assert.match(skill, /list_network_requests/);
+  assert.match(skill, /get_network_request/);
+  assert.match(skill, /import-mcp-response\.mjs/);
+  assert.match(skill, /Chrome 144/);
+});
+
 test('discovery summarizes static and network-only hosts for batch approval', () => {
   assert.equal(typeof collector.summarizeNetworkObservations, 'function');
   const summary = collector.summarizeNetworkObservations([
@@ -261,7 +271,7 @@ test('skill workflow requires batch approval, cumulative budget, and merged deli
     '--ledger',
     'merge-captures.mjs',
     'batch approval',
-    'log in before starting discovery',
+    'log in before discovery',
   ]) {
     assert.equal(combined.includes(requirement), true, `missing workflow requirement: ${requirement}`);
   }
@@ -284,7 +294,7 @@ test('skill defaults to operator-driven UI with Codex-managed capture and option
   }
 });
 
-test('Workshop workflow uses a baseline gate and one collector per batch', async () => {
+test('Workshop workflow uses a baseline gate and one bounded page session per batch', async () => {
   const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
   const runbook = await readFile(new URL('../references/workshop-runbook.md', import.meta.url), 'utf8');
   const combined = `${skill}\n${runbook}`.toLowerCase();
@@ -292,7 +302,7 @@ test('Workshop workflow uses a baseline gate and one collector per batch', async
     'baseline classification gate',
     'preloaded',
     'lazy-load batches',
-    'keep one collector running for the whole batch',
+    'one selected page',
     'one marker per batch',
     'component-level markers are optional',
     'audit every run',
@@ -310,8 +320,8 @@ test('workflow makes autosave and discovery cache tradeoffs explicit', async () 
   for (const requirement of [
     'component addition may autosave',
     'written scope must explicitly allow',
-    'approved attached chrome session',
-    'in-place authenticated state',
+    'default chrome',
+    'reuse authenticated state in place',
     'fresh capture profile requires owner approval',
     'never clear cache',
     'never transfer',
@@ -329,15 +339,17 @@ test('Chinese README is a conversation-first Codex user manual', async () => {
   for (const requirement of [
     '30 秒开始',
     '$codex-cdp-static-assets-skill',
-    '你只操作可见 Chrome',
-    '优先复用已经登录且已启用 CDP',
+    '你负责登录、刷新、添加组件和预览',
+    '默认 Chrome 登录态',
+    '--autoConnect',
+    'chrome://inspect/#remote-debugging',
     '严格基线完成',
-    '基线判断',
-    '一个批次只启动一次采集器',
+    '判断是否按需加载',
+    '不再要求 `127.0.0.1:9222` 或新建 Profile',
     'P1 完成',
     '全部完成',
-    '不需要预先知道 CDN',
-    '完成验收',
+    '我不知道 CDN',
+    'get_network_request',
   ]) {
     assert.equal(readme.includes(requirement), true, `README missing Codex user guidance: ${requirement}`);
   }
@@ -353,12 +365,12 @@ test('English README describes the same simple Workshop workflow', async () => {
   });
   if (readme === null) return;
   for (const requirement of [
-    'baseline classification gate',
-    'keep one collector running for the whole batch',
-    'component addition may autosave',
-    'approved attached chrome session',
-    'in-place authenticated state',
-    'unrelated top-level tabs may remain open',
+    'reuse the default chrome login',
+    '--autoconnect',
+    'chrome://inspect/#remote-debugging',
+    'list_network_requests',
+    'get_network_request',
+    'do not launch a second chrome profile',
   ]) {
     assert.equal(readme.toLowerCase().includes(requirement), true, `English README missing guidance: ${requirement}`);
   }

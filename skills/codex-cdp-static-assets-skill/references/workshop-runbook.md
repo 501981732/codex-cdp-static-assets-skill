@@ -14,14 +14,14 @@ Prepare an empty baseline page. Create batch pages only after the baseline class
 
 ## Run
 
-1. Log in before starting discovery. Prefer an already-running visible Chrome with loopback CDP. Keep exactly one page on the approved `pageHosts`; unrelated top-level tabs may remain open because the collector ignores them.
-2. Run discovery once with the page-only Scope. Open the empty Workshop and representative navigation through the visible UI.
+1. Log in before discovery. On Chrome 144+, prefer the default Chrome session through MCP `--autoConnect`; otherwise use an already approved loopback CDP session. Keep exactly one page on `pageHosts`. Because autoConnect can see all windows in the selected profile, close unrelated sensitive pages when practical.
+2. Attach/select the approved page before the operator refreshes. Run discovery once with the page-only Scope and representative visible UI navigation. Discovery lists requests but reads no response bodies.
 3. Review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. Obtain one batch approval for exact hosts and create the strict Scope.
-4. Start strict capture with the shared `--ledger`. Mark `P0:baseline`, visibly refresh or open the empty page, and let it settle.
+4. Start strict capture with the shared Ledger. Mark `P0:baseline`, visibly refresh or open the empty page, and let it settle. In MCP mode, inspect and import the request list at the checkpoint before navigating away.
 5. Run the baseline classification gate offline:
    - `preloaded`: many widget/component/plugin bundles already appear. Stop bulk additions, build the inventory offline, and validate only 1-3 representative components if useful.
    - `lazy`: mainly shell assets appear. Continue with lazy-load batches.
-6. For lazy-load batches, place roughly 5-10 related components on a page. Keep one collector running for the whole batch, including edit/configuration and preview/runtime states. Do not stop it between components.
+6. For lazy-load batches, place roughly 5-10 related components on a page, including edit/configuration and preview/runtime states. In loopback mode keep one collector running; in MCP mode keep one selected page and ingest the batch before its next navigation.
 7. Use one marker per batch by default, such as `P1:table-filter`. Component-level markers are optional for important ambiguous mappings.
 8. Audit every run. Inspect `risk-events.ndjson`, `invalid-assets.ndjson`, and ledger usage before continuing.
 9. Reuse the ledger for approved continuation runs. Merge once at the end with `merge-captures.mjs`, then audit the merged output.

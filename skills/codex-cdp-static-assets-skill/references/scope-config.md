@@ -63,8 +63,9 @@ Hard cumulative limits are optional. `0` disables a retained asset-count or tota
 
 ## Cache Decision
 
-- Default: reuse the approved attached Chrome session and its in-place authenticated state. Accept body-unavailable gaps created by discovery or normal browser caching; record the gap and do not refetch.
-- Existing-session rule: attach only to the unique page matching `pageHosts`. Ignore unrelated top-level tabs and never persist their metadata.
+- Default Chrome: on Chrome 144+, prefer Chrome DevTools MCP `--autoConnect` with explicit approval at `chrome://inspect/#remote-debugging`. Select only the unique page matching `pageHosts`. The MCP can see all windows in the selected profile, so close unrelated sensitive pages when practical and never persist their metadata.
+- Loopback fallback: use `capture-static-assets.mjs` only when an approved loopback endpoint already exists. Do not launch another profile automatically because port 9222 is absent.
+- Both backends: accept body-unavailable gaps created by discovery or normal browser caching; record the gap and do not refetch.
 - Exception: a fresh capture profile requires owner approval when body completeness is necessary. Do not transfer cookies, tokens, passwords, or profile files, and do not run both profiles together.
 - Always: never clear cache, disable cache, bypass the Service Worker, or replay a resource URL.
 

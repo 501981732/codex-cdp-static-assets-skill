@@ -2,26 +2,11 @@
 
 [中文](README.md)
 
-An authorization-first, passive Codex Skill that saves JS, CSS, WebAssembly, fonts, and optionally approved images naturally loaded by a visible Chrome session.
+An authorization-first, passive Codex Skill that saves JS, CSS, WebAssembly, fonts, and optional images already loaded by a visible Chrome page. It produces redacted manifests, hashes, a cumulative ledger, and audit reports.
 
-The operator controls the visible browser. Codex discovers hosts, manages the collector, checks risks, audits runs, and merges the final output. It does not automate clicks, inspect the DOM, execute page scripts, enumerate chunks, probe sourcemaps, replay URLs, or save HTML/API bodies.
+The operator handles login, refresh, component addition, and preview. Codex only inspects the selected page's local Network record and completed response bodies. It does not automate clicks, enumerate chunks, probe sourcemaps, replay URLs, change cache or Service Workers, or transfer credentials.
 
-## Quick Start
-
-```text
-Use $codex-cdp-static-assets-skill for a passive, low-intrusion capture of naturally loaded static assets.
-
-Page: https://workshop.example.com/...
-Case ID: SEC-2026-001
-I will control visible Chrome. Start with host discovery because I do not know the CDN.
-Authorization permits editing and autosave in a dedicated test module, but not publishing, actions, workflows, exports, permission changes, or production writeback.
-Record cumulative totals without a hard cap; keep a 50 MiB per-file limit.
-Wait for my confirmation at each stage.
-```
-
-You do not need to know the CDN in advance. Discovery records naturally observed host metadata without reading response bodies. Exact candidates enter strict Scope only after approval.
-
-## Install
+## Install the Skill
 
 ```bash
 npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
@@ -31,48 +16,57 @@ npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
   --yes
 ```
 
-Start a new Codex task after installation, then invoke `$codex-cdp-static-assets-skill`.
+Start a new Codex task after installation or update.
 
-Requires Node.js 22 or later and Chrome/Chromium with a loopback CDP endpoint. Prefer an already signed-in, CDP-enabled visible Chrome session; the Skill never transfers cookies or credentials.
+## Reuse the Default Chrome Login
 
-## Authorization
+When the account signs in only through the user's normal Chrome, use the official Chrome 144+ `autoConnect` path instead of port 9222 or a new profile.
 
-Record the case ID, test account, page, time window, asset types, owner traffic ceiling, and stop contact. Use a dedicated Workshop module and synthetic data.
+One-time MCP setup:
 
-Component addition may autosave. Written authorization must explicitly cover module/page creation, edits, and autosave. Publishing, actions, workflows, exports, deletes, permission changes, and production writeback remain forbidden unless separately approved.
+```bash
+codex mcp remove chrome-devtools
+codex mcp add chrome-devtools -- \
+  npx -y chrome-devtools-mcp@latest \
+  --autoConnect \
+  --no-usage-statistics \
+  --no-performance-crux
+```
 
-## Simple Workflow
+Restart Codex. In the already signed-in default Chrome:
 
-### 1. Discover once
+1. Open `chrome://inspect/#remote-debugging`.
+2. Enable remote debugging.
+3. Open the authorized target page.
+4. Approve Chrome's connection dialog when Codex connects.
 
-First log in normally and open the empty Workshop in a visible CDP-enabled Chrome session. Codex attaches only to the unique page matching the approved host; unrelated top-level tabs may remain open and are neither captured nor logged. After Codex starts Discovery, manually refresh the visible page and perform representative base navigation. Codex then reviews:
+`autoConnect` can access every window in the selected default profile. Close unrelated sensitive pages when practical. The Skill selects only the unique page matching the authorized hostname and does not persist other tabs.
 
-- `observed-network-hosts.json`
-- `observed-hosts.json`
-- `scope-candidates.json`
+Chrome versions below 144 cannot use `autoConnect`. Use an already approved loopback CDP session or a separately authorized capture profile; never copy the default profile, cookies, tokens, or passwords to bypass login controls.
 
-Candidates are not approval. Review exact hosts once with the owner or SOC, then build the strict Scope. Pause only when a later component naturally exposes a new host.
+## Quick Start
 
-### 2. Capture the strict baseline
+```text
+Use $codex-cdp-static-assets-skill for a passive, low-intrusion capture of naturally loaded static assets.
 
-Codex starts strict capture with `P0:baseline` and the shared ledger. Refresh or reopen the empty page through visible Chrome, then let it settle.
+Page: https://workshop.example.com/...
+Case ID: SEC-2026-001
+Reuse my current default Chrome login through autoConnect. I will control the visible page.
+I do not know the CDN, so discover exact hosts first and do not approve them automatically.
+Authorization permits editing and autosave in a dedicated test module, but not publishing, actions, workflows, exports, permission changes, or production writeback.
+Wait for my confirmation at each stage.
+```
 
-Run the baseline classification gate before creating many component pages:
+## Workflow
 
-- **Preloaded:** many widget/component/plugin bundles already appear. Stop bulk additions, inventory offline, and optionally validate 1-3 representatives.
-- **Lazy:** mainly shell assets appear. Continue with lazy-load batches.
+1. Codex selects the unique approved page. The operator refreshes and performs representative actions. Codex calls `list_network_requests` for discovery without reading bodies.
+2. Exact static and network dependency hosts receive one owner/SOC approval. No broad CDN wildcard is inferred.
+3. For the strict baseline, Codex checks the full request list first. Unknown hosts, `401`, `403`, `429`, repeated `5xx`, or account warnings stop the run before body access.
+4. For approved completed static requests, `get_network_request` writes only the response body to staging. A local importer validates Scope, type, size, and SHA-256. No URL is refetched. Missing bodies remain `body-unavailable`.
+5. If the baseline is preloaded, stop bulk component addition. If it is lazy, capture related components in batches of about 5-10 and ingest each batch before navigating away.
+6. Audit each run, reuse one ledger, merge once by SHA-256, and audit the merged output.
 
-### 3. Capture batches only when lazy
-
-Group about 5-10 related components per page. Keep one collector running for the whole batch, including edit/configuration and preview/runtime states. Do not restart it between components.
-
-Use one marker per batch by default. Component-level markers are optional for important ambiguous mappings.
-
-### 4. Audit and merge
-
-Audit every run, reuse one ledger, and inspect risk events before continuing. Merge once at the end by SHA-256, then audit the merged directory.
-
-Suggested operator checkpoints:
+Suggested checkpoints:
 
 ```text
 Logged in and empty Workshop open
@@ -84,48 +78,34 @@ P2 complete
 All complete
 ```
 
-## Cache Choice
-
-The lowest-intrusion default reuses the approved attached Chrome session and its in-place authenticated state, accepting body-unavailable gaps after discovery. Record cached-body or empty-`304` gaps; never refetch them.
-
-The collector cannot add CDP to an ordinary Chrome process after it starts. Chrome 136 and later also ignore command-line remote debugging for the default Chrome data directory. If no approved loopback endpoint exists, pause and let the operator choose a previously signed-in persistent capture profile or another approved CDP connection; do not launch a second profile automatically.
-
-When body completeness requires a fresh profile, obtain owner approval and use it only for the approved strict baseline. Never clear cache, disable cache, bypass Service Workers, transfer cookies, tokens, passwords, or profile files, or replay resource URLs.
-
 ## Stop Conditions
 
-Stop without automatic retry on `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, an unapproved host, an unexpected write, owner traffic/time exhaustion, or an owner/SOC instruction.
-
-If a new exact host appears, approve it and retry only the affected batch or component. Do not repeat completed work or add broad CDN wildcards.
+Stop without automatic retry on `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warnings, an unknown host, an unexpected write, owner traffic/time exhaustion, or owner/SOC instruction.
 
 ## Output
 
-- Deduplicated JS, CSS, WASM, fonts, and optional approved images
-- `manifest.ndjson` with redacted URLs, hashes, sizes, targets, and markers
+- Content-addressed JS, CSS, WASM, fonts, and optional images
+- `manifest.ndjson` with redacted URLs, hashes, sizes, types, and markers
 - One cumulative `task-ledger.ndjson`
 - `risk-events.ndjson`, `invalid-assets.ndjson`, and `asset-audit.json`
-- `merge-summary.json` and a coverage report
+- `merge-summary.json` for the final deduplicated result
 
 The result contains observed deployed artifacts, not original source, backend code, unauthorized roles, or untriggered branches.
 
-## Commands
+## Loopback Compatibility
+
+Use the bundled event collector only when Chrome already exposes an approved loopback CDP endpoint:
 
 ```bash
 node skills/codex-cdp-static-assets-skill/scripts/capture-static-assets.mjs \
-  --mode discover --scope ./discovery-scope.json --output ./host-discovery
-
-node skills/codex-cdp-static-assets-skill/scripts/capture-static-assets.mjs \
-  --mode capture --scope ./capture-scope.json \
+  --mode capture \
+  --scope ./capture-scope.json \
   --endpoint http://127.0.0.1:9222 \
-  --ledger ./task-ledger.ndjson --output ./capture-run-1
-
-node skills/codex-cdp-static-assets-skill/scripts/audit-capture.mjs ./capture-run-1
-
-node skills/codex-cdp-static-assets-skill/scripts/merge-captures.mjs \
-  --output ./capture-merged ./capture-run-1 ./capture-run-2
+  --ledger ./task-ledger.ndjson \
+  --output ./capture-run-1
 ```
 
-`maxAssets: 0` and `maxTotalMiB: 0` disable retained-body hard stops, not browser traffic controls. Keep a nonzero per-resource guard and follow the owner's request, traffic, and time ceiling.
+Do not launch a second Chrome profile merely because port 9222 is absent. Prefer `autoConnect` for the default Chrome case.
 
 ## Validation
 

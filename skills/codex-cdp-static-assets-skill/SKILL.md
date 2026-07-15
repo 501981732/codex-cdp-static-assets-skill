@@ -5,94 +5,53 @@ description: Use when Codex needs Chrome DevTools Protocol (CDP) to passively ca
 
 # Capture Static Assets with CDP
 
-## Non-negotiable boundary
+## Boundary
 
-Capture only completed responses that the approved visible browser naturally loads. Account safety comes from written authorization, limited UI scope, owner-visible traffic controls, and immediate stop conditions. Never frame the workflow as detection evasion.
+Capture only completed static-resource responses naturally loaded by the approved visible page. Written authorization, limited UI scope, owner traffic controls, and stop conditions are mandatory. Never describe this as detection evasion.
 
-Do not navigate or refresh the page, automate clicks, inspect the DOM, execute page scripts, refetch resources, enumerate chunks, probe sourcemaps, clear or disable cache, bypass Service Workers, replay URLs, alter fingerprints, or extract, copy, transfer, or replay browser credentials. Reuse only the authenticated state already present inside the approved attached Chrome session. A missing response body stays `body-unavailable`.
+Codex must not navigate, refresh, click, inspect the DOM, execute page scripts, refetch URLs, enumerate chunks, probe sourcemaps, alter cache or Service Workers, change fingerprints, or copy/replay credentials. The operator performs all visible UI actions. Do not save HTML, XHR, GraphQL, WebSocket payloads, feature flags, user configuration, API bodies, or production data.
 
-Do not save raw HTML, XHR, GraphQL, WebSocket payloads, routes, feature flags, user configuration, API bodies, or production data.
+## Before capture
 
-## Before live work
+1. Confirm case ID, test account, page host, time window, test module, allowed UI actions, asset types, owner traffic ceiling, stop contact, and autosave authorization.
+2. Read [references/scope-config.md](references/scope-config.md). For component-heavy pages, read [references/workshop-runbook.md](references/workshop-runbook.md).
+3. Choose the connection backend below. Never transfer cookies, tokens, passwords, or profile files.
 
-1. Confirm written scope: test account, page host, time window, test module, allowed UI actions, owner traffic ceiling, stop contact, and permitted asset types.
-2. Component addition may autosave. Written scope must explicitly allow creating or editing the dedicated test module and its autosave behavior. It must still forbid publishing, actions, workflows, exports, permission changes, deletes, and production writeback unless separately authorized.
-3. Prefer an already-running, visible, operator-approved Chrome session with loopback CDP and exactly one page matching `pageHosts`. Reuse that browser's in-place authenticated state; a separate profile is not required solely for capture. Unrelated top-level tabs may remain open because the collector attaches only to the approved page target and its related workers/frames.
-4. Read [references/scope-config.md](references/scope-config.md). For Workshop or component-heavy pages, also read [references/workshop-runbook.md](references/workshop-runbook.md).
+For authenticated applications, log in before discovery. Reuse authenticated state in place; never export it from Chrome.
 
-## Operator model
+## Connection choice
 
-Codex manages the collector, status checks, markers, stop decisions, audits, and offline merge. The operator controls the visible browser and performs login, navigation, refresh, component addition, configuration, preview, and normal read-only interaction.
+### A. Default Chrome via autoConnect (preferred)
 
-For authenticated applications, log in before starting discovery. The collector remains passive throughout.
+Use this when the account is already signed in to the user's normal Chrome. It requires Chrome 144+ and Chrome DevTools MCP configured with `--autoConnect`. Read [references/mcp-autoconnect.md](references/mcp-autoconnect.md) before operating.
 
-## Chrome session choice
+Do not probe `127.0.0.1:9222` first when `list_pages`, `select_page`, `list_network_requests`, and `get_network_request` are available. Ask the operator to enable the remote debugging server at `chrome://inspect/#remote-debugging` and approve Chrome's connection dialog.
 
-Probe the loopback endpoint first. If it exposes exactly one page matching `pageHosts`, attach to that page even when unrelated tabs are open. Never attach to unrelated top-level tabs or persist their metadata.
+The MCP can see all windows in the selected default profile. Recommend closing unrelated sensitive pages. Use `list_pages` only in memory, select the unique page matching `pageHosts`, and never persist unrelated page metadata.
 
-The bundled collector cannot add CDP to an ordinary Chrome process after it has started. Chrome 136 and later also ignore command-line remote debugging for the default Chrome data directory. If no approved loopback endpoint exists, pause instead of launching another profile automatically. Let the operator choose a previously signed-in persistent capture profile or another owner-approved CDP connection. Never copy cookies, passwords, tokens, or profile files to make attachment work.
+### B. Loopback collector (fallback)
 
-## Default workflow
+Use `capture-static-assets.mjs` only when the operator already has an approved loopback CDP endpoint. Attach to the unique page matching `pageHosts`; ignore unrelated targets. Do not launch a new profile automatically when attachment fails.
 
-### 1. Discover hosts once
+Chrome below 144 cannot use `autoConnect`. Chrome 136+ also ignores a remote-debugging port for the default data directory. In that case pause for an owner-approved connection choice; do not work around login controls.
 
-Run `--mode discover` with only the approved page host. Discovery records host metadata and writes `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`; it does not read response bodies or approve hosts.
+## autoConnect workflow
 
-Review exact host candidates with the owner or SOC and obtain one batch approval. Put approved static hosts in `assetHosts` and approved network-only dependencies in `approvedNetworkHosts`. Do not use broad vendor/CDN wildcards as a shortcut.
+1. Attach and select the approved page before the operator refreshes it.
+2. Discovery: after one operator-driven refresh and representative navigation, call `list_network_requests` without reading bodies. Review exact hosts and build the Scope; candidates are never auto-approved.
+3. Baseline: after approval, ask the operator to refresh the empty Workshop. At the checkpoint, inspect the complete request list first. Stop on unknown hosts, `401`, `403`, `429`, repeated `5xx`, auth challenges, or account warnings before reading any body.
+4. For approved completed JS/CSS/WASM/font requests only, call `get_network_request` by request ID with `responseFilePath`. Never set `requestFilePath`. Import each staged body with `import-mcp-response.mjs --delete-body`; the importer enforces Scope, validation, hashing, Ledger, and redacted manifests. A missing file becomes `body-unavailable`; never refetch it.
+5. Classify the baseline as `preloaded` or `lazy`. Only for `lazy`, capture batches of roughly 5-10 related components. Keep each batch within one page navigation, use one marker, and ingest its request list before navigating away.
+6. Audit every run, merge once, then audit the merged directory.
 
-### 2. Capture a strict baseline
+`list_network_requests` and `get_network_request` inspect Chrome's local Network record; they must not create a new HTTP request. Do not use `navigate_page`, `evaluate_script`, `click`, or URL-fetching tools in this workflow.
 
-Start `--mode capture` with the approved Scope and one shared `--ledger`. Start before the operator visibly refreshes or opens the empty Workshop page. Use one marker such as `P0:baseline`, then wait for the page to settle.
+## Loopback workflow
 
-Run a baseline classification gate before adding many components:
-
-- `preloaded`: baseline assets already contain many component, widget, or plugin bundles. Stop bulk component addition, inventory those assets offline, and validate only 1-3 representative components when needed.
-- `lazy`: baseline contains mainly the shell. Continue with lazy-load batches.
-
-### 3. Capture lazy-load batches only when needed
-
-Group roughly 5-10 related components per page. Keep one collector running for the whole batch. Start it before opening the batch, exercise edit/configuration and preview/runtime states through the visible UI, then stop after the batch settles.
-
-Use one marker per batch by default. Component-level markers are optional and should be reserved for important ambiguous mappings. Do not stop and restart the collector between components.
-
-If an unknown host appears, stop, review the exact host, obtain approval, and retry only the affected batch or component. Never auto-approve or auto-retry.
-
-### 4. Audit and deliver
-
-Audit every run with `audit-capture.mjs`. Reuse the same ledger across approved continuation runs. Merge once at the end with `merge-captures.mjs`, then audit the merged directory.
-
-Hard cumulative limits are optional: `0` disables a retained count or total-byte stop while the ledger still records usage. Keep a per-resource guard. These limits govern local retention, not browser traffic; always follow the owner's request, traffic, and time ceiling.
-
-## Cache choice
-
-The default, lowest-intrusion path reuses the already attached browser session and its in-place login state, accepting body-unavailable gaps after discovery. Never clear cache or refetch a missing body.
-
-When response-body completeness is materially required, a fresh capture profile requires owner approval. Use it only for the approved strict baseline. A second login/profile may trigger extra account review, so this is an exception. Never clear cache, run profiles concurrently, or transfer credentials.
-
-## Commands
-
-```bash
-node scripts/capture-static-assets.mjs --mode discover \
-  --scope ./discovery-scope.json --output ./host-discovery
-
-node scripts/capture-static-assets.mjs --mode capture \
-  --scope ./capture-scope.json \
-  --endpoint http://127.0.0.1:9222 \
-  --ledger ./task-ledger.ndjson \
-  --output ./capture-run-1
-
-node scripts/audit-capture.mjs ./capture-run-1
-
-node scripts/merge-captures.mjs \
-  --output ./capture-merged ./capture-run-1 ./capture-run-2
-
-node scripts/audit-capture.mjs ./capture-merged
-```
+Run discovery once, strict baseline once, then component batches only when baseline proves lazy loading. Keep one collector running per batch and let the operator drive the page. See [references/cdp-boundaries.md](references/cdp-boundaries.md) for commands and limitations.
 
 ## Stop and report
 
-Stop immediately on `401`, `403`, `429`, CAPTCHA/MFA, authentication challenges, account warnings, unexpected writes, unapproved hosts, repeated `5xx`, traffic ceiling exhaustion, or an owner/SOC request. Do not retry automatically.
+Stop without automatic retry on `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warnings, unexpected writes, unknown hosts, owner limits, or owner/SOC instruction.
 
-Return the merged output and summarize `merge-summary.json`, ledger usage, `risk-events.ndjson`, `invalid-assets.ndjson`, `asset-audit.json`, body failures, captured types, and markers. State that the result contains observed deployed static artifacts, not source code or untriggered branches.
-
-Use these coverage labels when reporting Workshop results: `visible-and-covered`, `visible-not-covered`, and `registered-not-visible`.
+Audit with `audit-capture.mjs`, reuse one Ledger, merge with `merge-captures.mjs`, and report risks, invalid bodies, body failures, hashes, markers, and coverage. The result contains observed deployed artifacts, not source code or untriggered branches. Use `visible-and-covered`, `visible-not-covered`, and `registered-not-visible` for Workshop coverage.
