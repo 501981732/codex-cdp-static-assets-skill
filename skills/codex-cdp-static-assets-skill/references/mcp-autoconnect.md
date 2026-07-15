@@ -45,19 +45,27 @@ Never infer approval from a CDN name. Obtain one batch approval for exact candid
 
 Attach before the operator refreshes or adds components. At each checkpoint:
 
+First resolve the only permitted staging root from the runtime rather than assuming `/tmp` or a workspace directory:
+
+```bash
+node -p 'require("node:os").tmpdir()'
+```
+
 1. Call `list_network_requests` for all resource types to check hosts and stop statuses.
 2. Stop before body reads if the page left `pageHosts`, an unknown host appeared, or a stop condition is present.
 3. Filter the same observed list to completed `script`, `stylesheet`, `font`, and approved WASM/image candidates.
-4. For each approved request ID, call `get_network_request` with only `reqid` and an absolute `responseFilePath` under `<run>/.mcp-staging/`. Never set `requestFilePath`.
-5. If Chrome reports that the response body is unavailable, record `body-unavailable`; do not reload or replay the URL.
-6. Import a saved response immediately, then delete the staging body:
+4. Before the bulk pass, use one small approved 200 JS/CSS response as a canary. Call `get_network_request` with only `reqid` and an absolute `responseFilePath` under the resolved `os.tmpdir()` staging directory. Continue only when the returned object has `isError !== true`, the saved file is non-empty, and the importer successfully hashes and deletes it.
+5. Use the same staging directory for each remaining approved request ID. Never set `requestFilePath`.
+6. Inspect the returned MCP object, not just thrown exceptions. If `isError === true` describes a local path/save/tool failure, fix staging and retry the same request ID; this is local inspection and creates no network request. If Chrome reports the response body itself is unavailable, record `body-unavailable`; do not reload or replay the URL.
+7. Import a saved response immediately, then delete the staging body:
 
 ```bash
 node scripts/import-mcp-response.mjs \
   --scope ./capture-scope.json \
   --output ./capture-run-1 \
   --ledger ./task-ledger.ndjson \
-  --body ./capture-run-1/.mcp-staging/REQ.network-response \
+  --staging-root '/actual/value/from/node-os-tmpdir' \
+  --body '/actual/value/from/node-os-tmpdir/cdp-static-assets/REQ.network-response' \
   --url 'https://approved.example/chunk.js?build=123' \
   --status 200 \
   --resource-type script \
@@ -70,6 +78,8 @@ node scripts/import-mcp-response.mjs \
 Pass the observed URL only to the local importer. Its stored manifest redacts every query value and removes fragments. Shell-quote the URL. Do not save request headers or request bodies.
 
 To record an unavailable body, omit `--body` and `--delete-body` while keeping the other metadata.
+
+The importer refuses to delete a body outside `--staging-root`, and a requested cleanup failure is fatal. Inspect only the target MCP configuration section when diagnosing connection setup; never print whole configuration or environment files that may contain unrelated secrets.
 
 ## Behavioral limits
 
@@ -86,3 +96,5 @@ node scripts/audit-capture.mjs ./capture-run-1
 ```
 
 Merge only after all approved batches are complete.
+
+The merged delivery is organized as `assets/<exact-host>/<original-url-path>`. SHA-256 remains in `metadata/manifest.ndjson`; it is not used to create a second set of hash-named files.

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -77,7 +78,6 @@ async function appendNdjson(path, value) {
 
 async function initializeOutput(output, scope, ledgerPath) {
   await mkdir(join(output, 'assets'), { recursive: true });
-  await mkdir(join(output, '.mcp-staging'), { recursive: true });
   const provenancePath = join(output, 'provenance.json');
   await writeFile(provenancePath, JSON.stringify({
     startedAt: new Date().toISOString(),
@@ -124,6 +124,7 @@ export async function importMcpResponse(input) {
   const output = resolve(input.output);
   const ledgerPath = input.ledgerPath ? resolve(input.ledgerPath) : null;
   const bodyPath = input.bodyPath ? resolve(input.bodyPath) : null;
+  const stagingRoot = resolve(input.stagingRoot || tmpdir());
   const scope = normalizeScope(JSON.parse(await readFile(scopePath, 'utf8')));
   await initializeOutput(output, scope, ledgerPath);
 
@@ -135,9 +136,15 @@ export async function importMcpResponse(input) {
   const manifestPath = join(output, 'manifest.ndjson');
   const cleanupStagedBody = async () => {
     if (!input.deleteBody || !bodyPath) return;
-    const stagedRelativePath = relative(join(output, '.mcp-staging'), bodyPath);
-    if (!stagedRelativePath || stagedRelativePath.startsWith('..') || isAbsolute(stagedRelativePath)) return;
-    await unlink(bodyPath).catch(() => {});
+    const [canonicalRoot, canonicalBody] = await Promise.all([
+      realpath(stagingRoot),
+      realpath(bodyPath),
+    ]);
+    const stagedRelativePath = relative(canonicalRoot, canonicalBody);
+    if (!stagedRelativePath || stagedRelativePath.startsWith('..') || isAbsolute(stagedRelativePath)) {
+      throw new Error(`Refusing to delete body outside staging root: ${bodyPath}`);
+    }
+    await unlink(canonicalBody);
   };
 
   if (!urlScope.network || !urlScope.allowed) {
@@ -306,7 +313,7 @@ function usage() {
   return `Usage:
   node import-mcp-response.mjs --scope FILE --output DIR --url URL --status CODE \\
     --resource-type TYPE [--mime-type MIME] [--body FILE] [--request-id ID] \\
-    [--marker LABEL] [--ledger FILE] [--delete-body]
+    [--marker LABEL] [--ledger FILE] [--staging-root DIR] [--delete-body]
 
 Omit --body to record body-unavailable. This command never fetches a URL.
 `;
@@ -332,6 +339,7 @@ function parseArgs(argv) {
     else if (arg === '--mime-type') options.mimeType = next();
     else if (arg === '--marker') options.marker = next();
     else if (arg === '--request-id') options.requestId = next();
+    else if (arg === '--staging-root') options.stagingRoot = next();
     else if (arg === '--delete-body') options.deleteBody = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
