@@ -9,7 +9,7 @@ description: Use when Codex needs Chrome DevTools Protocol (CDP) to passively ca
 
 Capture only completed responses that the approved visible browser naturally loads. Account safety comes from written authorization, limited UI scope, owner-visible traffic controls, and immediate stop conditions. Never frame the workflow as detection evasion.
 
-Do not navigate or refresh the page, automate clicks, inspect the DOM, execute page scripts, refetch resources, enumerate chunks, probe sourcemaps, clear or disable cache, bypass Service Workers, replay URLs, alter fingerprints, or reuse browser credentials. A missing response body stays `body-unavailable`.
+Do not navigate or refresh the page, automate clicks, inspect the DOM, execute page scripts, refetch resources, enumerate chunks, probe sourcemaps, clear or disable cache, bypass Service Workers, replay URLs, alter fingerprints, or extract, copy, transfer, or replay browser credentials. Reuse only the authenticated state already present inside the approved attached Chrome session. A missing response body stays `body-unavailable`.
 
 Do not save raw HTML, XHR, GraphQL, WebSocket payloads, routes, feature flags, user configuration, API bodies, or production data.
 
@@ -17,7 +17,7 @@ Do not save raw HTML, XHR, GraphQL, WebSocket payloads, routes, feature flags, u
 
 1. Confirm written scope: test account, page host, time window, test module, allowed UI actions, owner traffic ceiling, stop contact, and permitted asset types.
 2. Component addition may autosave. Written scope must explicitly allow creating or editing the dedicated test module and its autosave behavior. It must still forbid publishing, actions, workflows, exports, permission changes, deletes, and production writeback unless separately authorized.
-3. Use one dedicated visible Chrome profile and one approved tab. Bind CDP to `127.0.0.1` only. Ask the owner or SOC to observe the window.
+3. Prefer an already-running, visible, operator-approved Chrome session with loopback CDP and exactly one page matching `pageHosts`. Reuse that browser's in-place authenticated state; a separate profile is not required solely for capture. Unrelated top-level tabs may remain open because the collector attaches only to the approved page target and its related workers/frames.
 4. Read [references/scope-config.md](references/scope-config.md). For Workshop or component-heavy pages, also read [references/workshop-runbook.md](references/workshop-runbook.md).
 
 ## Operator model
@@ -25,6 +25,12 @@ Do not save raw HTML, XHR, GraphQL, WebSocket payloads, routes, feature flags, u
 Codex manages the collector, status checks, markers, stop decisions, audits, and offline merge. The operator controls the visible browser and performs login, navigation, refresh, component addition, configuration, preview, and normal read-only interaction.
 
 For authenticated applications, log in before starting discovery. The collector remains passive throughout.
+
+## Chrome session choice
+
+Probe the loopback endpoint first. If it exposes exactly one page matching `pageHosts`, attach to that page even when unrelated tabs are open. Never attach to unrelated top-level tabs or persist their metadata.
+
+The bundled collector cannot add CDP to an ordinary Chrome process after it has started. Chrome 136 and later also ignore command-line remote debugging for the default Chrome data directory. If no approved loopback endpoint exists, pause instead of launching another profile automatically. Let the operator choose a previously signed-in persistent capture profile or another owner-approved CDP connection. Never copy cookies, passwords, tokens, or profile files to make attachment work.
 
 ## Default workflow
 
@@ -59,9 +65,9 @@ Hard cumulative limits are optional: `0` disables a retained count or total-byte
 
 ## Cache choice
 
-The default, lowest-intrusion path is same-profile capture accepts body-unavailable gaps after discovery. Never clear cache or refetch a missing body.
+The default, lowest-intrusion path reuses the already attached browser session and its in-place login state, accepting body-unavailable gaps after discovery. Never clear cache or refetch a missing body.
 
-When response-body completeness is materially required, a fresh capture profile requires owner approval. Retire the discovery profile, open one new dedicated capture profile, log in normally, and run only the approved strict baseline. A second login/profile may trigger extra account review, so this is not the default. Never clear cache, run profiles concurrently, or transfer cookies.
+When response-body completeness is materially required, a fresh capture profile requires owner approval. Use it only for the approved strict baseline. A second login/profile may trigger extra account review, so this is an exception. Never clear cache, run profiles concurrently, or transfer credentials.
 
 ## Commands
 

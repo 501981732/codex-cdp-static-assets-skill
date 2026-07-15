@@ -63,8 +63,9 @@ Hard cumulative limits are optional. `0` disables a retained asset-count or tota
 
 ## Cache Decision
 
-- Default: same-profile capture accepts body-unavailable gaps created by discovery or normal browser caching. Record the gap and do not refetch.
-- Exception: fresh capture profile requires owner approval when body completeness is necessary. Retire the discovery profile first, use one new dedicated profile, and log in normally. Do not transfer cookies or run both profiles together.
+- Default: reuse the approved attached Chrome session and its in-place authenticated state. Accept body-unavailable gaps created by discovery or normal browser caching; record the gap and do not refetch.
+- Existing-session rule: attach only to the unique page matching `pageHosts`. Ignore unrelated top-level tabs and never persist their metadata.
+- Exception: a fresh capture profile requires owner approval when body completeness is necessary. Do not transfer cookies, tokens, passwords, or profile files, and do not run both profiles together.
 - Always: never clear cache, disable cache, bypass the Service Worker, or replay a resource URL.
 
 ## Outputs

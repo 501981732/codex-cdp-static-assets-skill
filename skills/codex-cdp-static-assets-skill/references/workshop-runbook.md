@@ -14,7 +14,7 @@ Prepare an empty baseline page. Create batch pages only after the baseline class
 
 ## Run
 
-1. Log in before starting discovery. Close unrelated tabs and use one approved visible page.
+1. Log in before starting discovery. Prefer an already-running visible Chrome with loopback CDP. Keep exactly one page on the approved `pageHosts`; unrelated top-level tabs may remain open because the collector ignores them.
 2. Run discovery once with the page-only Scope. Open the empty Workshop and representative navigation through the visible UI.
 3. Review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. Obtain one batch approval for exact hosts and create the strict Scope.
 4. Start strict capture with the shared `--ledger`. Mark `P0:baseline`, visibly refresh or open the empty page, and let it settle.
@@ -30,9 +30,9 @@ If an unknown host appears, stop. Review and approve the exact host, then retry 
 
 ## Cache Choice
 
-The lowest-intrusion default is same-profile capture accepts body-unavailable gaps after discovery. Never clear cache or refetch missing bodies.
+The lowest-intrusion default reuses the approved attached Chrome session and its in-place login state, accepting body-unavailable gaps after discovery. Never clear cache or refetch missing bodies.
 
-If complete response bodies are required, a fresh capture profile requires owner approval. Retire the discovery profile first and perform one normal login in the new dedicated profile. A second login may receive additional account review, so it is an explicit exception, not the default.
+If complete response bodies are required, a fresh capture profile requires owner approval. A second login may receive additional account review, so it is an explicit exception. Never transfer cookies, tokens, passwords, or profile files.
 
 ## Suggested Chat Checkpoints
 

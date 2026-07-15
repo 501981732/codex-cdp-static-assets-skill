@@ -24,7 +24,7 @@ Do not add any operation that creates, changes, or replays traffic:
 - page-context `fetch`, XHR, dynamic script/link injection, or `Runtime.evaluate` for retrieval
 - Cache Storage enumeration or cached-response export
 - URL guessing, chunk-ID enumeration, directory scanning, or sourcemap probing
-- cookie/token extraction or replay outside the attached browser
+- cookie/token/password extraction, copying, transfer, or replay outside the attached browser
 - request interception used to alter headers, referer, origin, signatures, or responses
 
 Do not use `Debugger.getScriptSource` or CSS-domain extraction by default. They can collect runtime-generated material that is broader than a static network-resource inventory. Add them only when the written scope explicitly covers runtime source and the collection plan records that distinction.
@@ -35,7 +35,14 @@ Do not use `Debugger.getScriptSource` or CSS-domain extraction by default. They 
 - Preserve normal cache and Service Worker behavior.
 - A disk-cache or Service-Worker response may still expose a body through `Network.getResponseBody`; save it when available.
 - If the body is unavailable, keep URL metadata and the error. Never compensate with an active request.
-- Use a fresh dedicated profile once when a cold run is approved. Do not clear cache repeatedly.
+- Prefer the already approved attached session. Use a fresh profile only when a cold run is explicitly approved; do not clear cache repeatedly.
+
+## Existing Chrome sessions
+
+- Reuse the authenticated state already present inside an approved CDP-enabled Chrome session; never read or export credentials.
+- Attach only to the unique top-level page matching `pageHosts` and recursively to its related workers/frames.
+- Ignore unrelated top-level tabs and never persist their URLs, titles, or target metadata.
+- If no loopback CDP endpoint exists, pause. Do not copy profile data or launch another profile without the operator's choice.
 
 ## Data handling
 

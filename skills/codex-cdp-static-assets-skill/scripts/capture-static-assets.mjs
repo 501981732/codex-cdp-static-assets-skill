@@ -233,12 +233,20 @@ export function isIgnorableTarget(info) {
 
 export function findPageTargetIssues(targetInfos, pageHosts) {
   const pages = targetInfos.filter((info) => info.type === 'page' && !isIgnorableTarget(info));
-  const networkPages = pages.filter((info) => scopeHost(info.url, pageHosts).network);
-  const issues = networkPages
-    .filter((info) => !scopeHost(info.url, pageHosts).allowed)
-    .map((info) => ({ kind: 'unapproved-page-target', targetId: info.targetId, url: redactUrl(info.url) }));
-  if (networkPages.length > 1) issues.push({ kind: 'multiple-page-targets', count: networkPages.length });
+  const approvedPages = pages.filter((info) => scopeHost(info.url, pageHosts).allowed);
+  const issues = [];
+  if (approvedPages.length === 0) issues.push({ kind: 'approved-page-target-not-found' });
+  if (approvedPages.length > 1) issues.push({ kind: 'multiple-approved-page-targets', count: approvedPages.length });
   return issues;
+}
+
+export function selectApprovedPageTarget(targetInfos, pageHosts) {
+  const issues = findPageTargetIssues(targetInfos, pageHosts);
+  if (issues.length) return { target: null, issues };
+  return {
+    target: targetInfos.find((info) => info.type === 'page' && !isIgnorableTarget(info) && scopeHost(info.url, pageHosts).allowed),
+    issues: [],
+  };
 }
 
 async function readLedgerEntries(path) {
@@ -482,7 +490,7 @@ async function main() {
   const client = new CdpClient(version.webSocketDebuggerUrl);
   await client.open();
   const { targetInfos: initialTargetInfos } = await client.send('Target.getTargets');
-  const pageTargetIssues = findPageTargetIssues(initialTargetInfos, options.pageHosts);
+  const { target: selectedPageTarget, issues: pageTargetIssues } = selectApprovedPageTarget(initialTargetInfos, options.pageHosts);
   if (pageTargetIssues.length) {
     client.close();
     throw new Error(`Page target preflight failed: ${JSON.stringify(pageTargetIssues)}`);
@@ -579,10 +587,16 @@ async function main() {
       maxResourceBufferSize: options.maxResourceMb * 1024 * 1024,
       enableDurableMessages: true,
     }, sessionId);
+    await client.send('Target.setAutoAttach', {
+      autoAttach: true,
+      waitForDebuggerOnStart: true,
+      flatten: true,
+    }, sessionId);
     await client.send('Runtime.runIfWaitingForDebugger', {}, sessionId);
   };
 
-  client.on('Target.attachedToTarget', (params) => {
+  client.on('Target.attachedToTarget', (params, parentSessionId) => {
+    if (!parentSessionId || !sessions.has(parentSessionId)) return;
     if (isIgnorableTarget(params.targetInfo)) {
       track((async () => {
         await client.send('Runtime.runIfWaitingForDebugger', {}, params.sessionId).catch(() => {});
@@ -898,20 +912,12 @@ async function main() {
   });
 
   await client.send('Target.setDiscoverTargets', { discover: true });
-  await client.send('Target.setAutoAttach', {
-    autoAttach: true,
-    waitForDebuggerOnStart: true,
-    flatten: true,
-  });
-
-  for (const info of initialTargetInfos.filter((item) => TARGET_TYPES.has(item.type) && !isIgnorableTarget(item))) {
-    if (attachedTargetIds.has(info.targetId)) continue;
-    try {
-      const { sessionId } = await client.send('Target.attachToTarget', { targetId: info.targetId, flatten: true });
-      await setupSession(sessionId, info);
-    } catch (error) {
-      await enqueueLine(riskPath, { at: new Date().toISOString(), kind: 'target-attach-failed', targetType: info.type, error: error.message });
-    }
+  try {
+    const { sessionId } = await client.send('Target.attachToTarget', { targetId: selectedPageTarget.targetId, flatten: true });
+    await setupSession(sessionId, selectedPageTarget);
+  } catch (error) {
+    await enqueueLine(riskPath, { at: new Date().toISOString(), kind: 'target-attach-failed', targetType: selectedPageTarget.type, error: error.message });
+    requestStop('Approved page target could not be attached');
   }
 
   const readline = createInterface({ input: process.stdin, output: process.stdout, terminal: Boolean(process.stdin.isTTY) });

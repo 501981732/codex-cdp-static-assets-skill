@@ -193,15 +193,31 @@ test('task ledger enforces one cumulative budget across capture runs', () => {
   ], { maxAssets: 3, maxTotalMiB: 1, maxAssetMiB: 50 }, 'CASE-1'), /caseId/);
 });
 
-test('preflight identifies unrelated or excess page targets', () => {
+test('preflight selects the approved page and ignores unrelated top-level tabs', () => {
   assert.equal(typeof collector.findPageTargetIssues, 'function');
-  const issues = collector.findPageTargetIssues([
+  assert.equal(typeof collector.selectApprovedPageTarget, 'function');
+  const selection = collector.selectApprovedPageTarget([
     { targetId: '1', type: 'page', url: 'https://app.example.com/workshop' },
     { targetId: '2', type: 'page', url: 'https://www.google.com/search?q=test' },
     { targetId: '3', type: 'service_worker', url: 'chrome-extension://abc/background.js' },
   ], ['app.example.com']);
 
-  assert.deepEqual(issues.map((item) => item.kind), ['unapproved-page-target', 'multiple-page-targets']);
+  assert.equal(selection.target.targetId, '1');
+  assert.deepEqual(selection.issues, []);
+});
+
+test('preflight stops when the approved page is missing or ambiguous', () => {
+  const missing = collector.findPageTargetIssues([
+    { targetId: '1', type: 'page', url: 'https://www.google.com/' },
+  ], ['app.example.com']);
+  assert.deepEqual(missing, [{ kind: 'approved-page-target-not-found' }]);
+
+  const ambiguous = collector.findPageTargetIssues([
+    { targetId: '1', type: 'page', url: 'https://app.example.com/workshop/a' },
+    { targetId: '2', type: 'page', url: 'https://app.example.com/workshop/b' },
+    { targetId: '3', type: 'page', url: 'https://unrelated.example.net/' },
+  ], ['app.example.com']);
+  assert.deepEqual(ambiguous, [{ kind: 'multiple-approved-page-targets', count: 2 }]);
 });
 
 test('extension targets are ignored instead of logged as attachment risks', () => {
@@ -217,6 +233,14 @@ test('collector validates and opens CDP before creating the output directory', a
   assert.notEqual(endpointFetch, -1);
   assert.notEqual(outputCreation, -1);
   assert.equal(endpointFetch < outputCreation, true);
+});
+
+test('collector attaches only to the selected approved page target', async () => {
+  const source = await readFile(new URL('./capture-static-assets.mjs', import.meta.url), 'utf8');
+  assert.equal(source.includes('selectedPageTarget.targetId'), true);
+  assert.equal(source.includes('initialTargetInfos.filter((item) => TARGET_TYPES.has(item.type)'), false);
+  assert.equal(source.includes("client.on('Target.attachedToTarget', (params, parentSessionId)"), true);
+  assert.equal(source.includes('!sessions.has(parentSessionId)'), true);
 });
 
 test('status exposes target and network diagnostics', async () => {
@@ -286,9 +310,11 @@ test('workflow makes autosave and discovery cache tradeoffs explicit', async () 
   for (const requirement of [
     'component addition may autosave',
     'written scope must explicitly allow',
-    'same-profile capture accepts body-unavailable gaps',
+    'approved attached chrome session',
+    'in-place authenticated state',
     'fresh capture profile requires owner approval',
     'never clear cache',
+    'never transfer',
   ]) {
     assert.equal(combined.includes(requirement), true, `missing safety guidance: ${requirement}`);
   }
@@ -304,6 +330,7 @@ test('Chinese README is a conversation-first Codex user manual', async () => {
     '30 秒开始',
     '$codex-cdp-static-assets-skill',
     '你只操作可见 Chrome',
+    '优先复用已经登录且已启用 CDP',
     '严格基线完成',
     '基线判断',
     '一个批次只启动一次采集器',
@@ -329,7 +356,9 @@ test('English README describes the same simple Workshop workflow', async () => {
     'baseline classification gate',
     'keep one collector running for the whole batch',
     'component addition may autosave',
-    'same-profile capture accepts body-unavailable gaps',
+    'approved attached chrome session',
+    'in-place authenticated state',
+    'unrelated top-level tabs may remain open',
   ]) {
     assert.equal(readme.toLowerCase().includes(requirement), true, `English README missing guidance: ${requirement}`);
   }

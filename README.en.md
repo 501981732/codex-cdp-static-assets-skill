@@ -33,7 +33,7 @@ npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
 
 Start a new Codex task after installation, then invoke `$codex-cdp-static-assets-skill`.
 
-Requires Node.js 22 or later and Chrome/Chromium with a loopback CDP endpoint.
+Requires Node.js 22 or later and Chrome/Chromium with a loopback CDP endpoint. Prefer an already signed-in, CDP-enabled visible Chrome session; the Skill never transfers cookies or credentials.
 
 ## Authorization
 
@@ -45,7 +45,7 @@ Component addition may autosave. Written authorization must explicitly cover mod
 
 ### 1. Discover once
 
-First log in normally and open the empty Workshop in the dedicated Chrome profile. After Codex starts Discovery, manually refresh the visible page and perform representative base navigation. Codex then reviews:
+First log in normally and open the empty Workshop in a visible CDP-enabled Chrome session. Codex attaches only to the unique page matching the approved host; unrelated top-level tabs may remain open and are neither captured nor logged. After Codex starts Discovery, manually refresh the visible page and perform representative base navigation. Codex then reviews:
 
 - `observed-network-hosts.json`
 - `observed-hosts.json`
@@ -86,11 +86,11 @@ All complete
 
 ## Cache Choice
 
-The lowest-intrusion default is same-profile capture accepts body-unavailable gaps after discovery. Record cached-body or empty-`304` gaps; never refetch them.
+The lowest-intrusion default reuses the approved attached Chrome session and its in-place authenticated state, accepting body-unavailable gaps after discovery. Record cached-body or empty-`304` gaps; never refetch them.
 
-When body completeness is required, a fresh capture profile requires owner approval. Retire the discovery profile, log in normally with one new dedicated profile, and run only the approved strict baseline. A second login may receive additional account review, so this is an exception.
+The collector cannot add CDP to an ordinary Chrome process after it starts. Chrome 136 and later also ignore command-line remote debugging for the default Chrome data directory. If no approved loopback endpoint exists, pause and let the operator choose a previously signed-in persistent capture profile or another approved CDP connection; do not launch a second profile automatically.
 
-Never clear cache, disable cache, bypass Service Workers, transfer cookies, or replay resource URLs.
+When body completeness requires a fresh profile, obtain owner approval and use it only for the approved strict baseline. Never clear cache, disable cache, bypass Service Workers, transfer cookies, tokens, passwords, or profile files, or replay resource URLs.
 
 ## Stop Conditions
 
