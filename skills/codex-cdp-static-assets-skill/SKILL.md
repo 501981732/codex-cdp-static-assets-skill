@@ -1,115 +1,92 @@
 ---
 name: codex-cdp-static-assets-skill
-description: Use when Codex needs Chrome DevTools Protocol (CDP) to capture JS, CSS, WebAssembly, fonts, or images naturally loaded by an authorized authenticated web session, especially for lazy-loaded component coverage, security-assessment evidence, or static-asset inventories where account risk and auditability matter.
+description: Use when Codex needs Chrome DevTools Protocol (CDP) to passively capture JS, CSS, WebAssembly, fonts, or images naturally loaded by an authorized authenticated browser session, especially for Workshop components, lazy-loaded UI coverage, security evidence, or static-asset inventories.
 ---
 
 # Capture Static Assets with CDP
 
-## Core rule
+## Non-negotiable boundary
 
-Capture only responses the browser naturally loads during approved UI use. Treat account-risk reduction as compliance and load management, never as detection evasion.
+Capture only completed responses that the approved visible browser naturally loads. Account safety comes from written authorization, limited UI scope, owner-visible traffic controls, and immediate stop conditions. Never frame the workflow as detection evasion.
 
-Do not navigate, refresh, fetch, replay URLs, enumerate chunks, request sourcemaps, export Cache Storage, disable cache, bypass Service Workers, alter fingerprints, randomize timing, or reuse credentials outside the browser. A missing body remains `body-unavailable`; never fill the gap with another request.
+Do not navigate or refresh the page, automate clicks, inspect the DOM, execute page scripts, refetch resources, enumerate chunks, probe sourcemaps, clear or disable cache, bypass Service Workers, replay URLs, alter fingerprints, or reuse browser credentials. A missing response body stays `body-unavailable`.
 
-## Before capture
+Do not save raw HTML, XHR, GraphQL, WebSocket payloads, routes, feature flags, user configuration, API bodies, or production data.
 
-1. Confirm written scope, approved hosts/CDNs, test account, time window, UI scenarios, request budget, and stop contact. Do not start live capture without these.
-2. Use a dedicated Chrome profile and test account. Bind DevTools to loopback only.
-3. Ask the platform owner or SOC to observe the window. Prefer an approved account/IP policy over any attempt to appear human.
-4. Read [references/scope-config.md](references/scope-config.md). Read [references/workshop-runbook.md](references/workshop-runbook.md) for component-heavy Workshop or lazy-load coverage.
+## Before live work
 
-## Default operator model
+1. Confirm written scope: test account, page host, time window, test module, allowed UI actions, owner traffic ceiling, stop contact, and permitted asset types.
+2. Component addition may autosave. Written scope must explicitly allow creating or editing the dedicated test module and its autosave behavior. It must still forbid publishing, actions, workflows, exports, permission changes, deletes, and production writeback unless separately authorized.
+3. Use one dedicated visible Chrome profile and one approved tab. Bind CDP to `127.0.0.1` only. Ask the owner or SOC to observe the window.
+4. Read [references/scope-config.md](references/scope-config.md). For Workshop or component-heavy pages, also read [references/workshop-runbook.md](references/workshop-runbook.md).
 
-Codex manages the collector, markers, status checks, stop decisions, audits, and offline merge. The operator controls the visible browser and performs every page navigation, component addition, configuration change, preview, and read-only interaction. The operator can report short checkpoints in chat; Codex enters the corresponding terminal marker. Do not automate clicks, inspect the DOM, or execute page scripts merely to reduce operator effort.
+## Operator model
 
-For Workshop, use one dedicated test module with an empty baseline page and 5-7 batch pages containing 8-10 visible widgets each. Cover both edit/configuration and preview/runtime states with synthetic data. Do not trigger hidden, internal, permission-gated, publishing, action, workflow, writeback, export, or production-data paths.
+Codex manages the collector, status checks, markers, stop decisions, audits, and offline merge. The operator controls the visible browser and performs login, navigation, refresh, component addition, configuration, preview, and normal read-only interaction.
 
-## Discover, approve, capture
+For authenticated applications, log in before starting discovery. The collector remains passive throughout.
 
-Launch visible Chrome and log in normally. For authenticated applications, log in before starting discovery. After authentication, close unrelated tabs, keep one `about:blank` tab in the dedicated profile, start discovery, then navigate that same visible tab to the approved page.
+## Default workflow
+
+### 1. Discover hosts once
+
+Run `--mode discover` with only the approved page host. Discovery records host metadata and writes `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`; it does not read response bodies or approve hosts.
+
+Review exact host candidates with the owner or SOC and obtain one batch approval. Put approved static hosts in `assetHosts` and approved network-only dependencies in `approvedNetworkHosts`. Do not use broad vendor/CDN wildcards as a shortcut.
+
+### 2. Capture a strict baseline
+
+Start `--mode capture` with the approved Scope and one shared `--ledger`. Start before the operator visibly refreshes or opens the empty Workshop page. Use one marker such as `P0:baseline`, then wait for the page to settle.
+
+Run a baseline classification gate before adding many components:
+
+- `preloaded`: baseline assets already contain many component, widget, or plugin bundles. Stop bulk component addition, inventory those assets offline, and validate only 1-3 representative components when needed.
+- `lazy`: baseline contains mainly the shell. Continue with lazy-load batches.
+
+### 3. Capture lazy-load batches only when needed
+
+Group roughly 5-10 related components per page. Keep one collector running for the whole batch. Start it before opening the batch, exercise edit/configuration and preview/runtime states through the visible UI, then stop after the batch settles.
+
+Use one marker per batch by default. Component-level markers are optional and should be reserved for important ambiguous mappings. Do not stop and restart the collector between components.
+
+If an unknown host appears, stop, review the exact host, obtain approval, and retry only the affected batch or component. Never auto-approve or auto-retry.
+
+### 4. Audit and deliver
+
+Audit every run with `audit-capture.mjs`. Reuse the same ledger across approved continuation runs. Merge once at the end with `merge-captures.mjs`, then audit the merged directory.
+
+Hard cumulative limits are optional: `0` disables a retained count or total-byte stop while the ledger still records usage. Keep a per-resource guard. These limits govern local retention, not browser traffic; always follow the owner's request, traffic, and time ceiling.
+
+## Cache choice
+
+The default, lowest-intrusion path is same-profile capture accepts body-unavailable gaps after discovery. Never clear cache or refetch a missing body.
+
+When response-body completeness is materially required, a fresh capture profile requires owner approval. Retire the discovery profile, open one new dedicated capture profile, log in normally, and run only the approved strict baseline. A second login/profile may trigger extra account review, so this is not the default. Never clear cache, run profiles concurrently, or transfer cookies.
+
+## Commands
 
 ```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --remote-debugging-address=127.0.0.1 \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.cdp-authorized-test-profile"
-```
+node scripts/capture-static-assets.mjs --mode discover \
+  --scope ./discovery-scope.json --output ./host-discovery
 
-First run discovery with only the approved page host. It records every naturally observed HTTP(S) and WebSocket host as metadata, separately identifies static-resource hosts, and never reads response bodies or approves a host:
-
-```bash
-node scripts/capture-static-assets.mjs \
-  --mode discover \
-  --scope ./workshop-discovery-scope.json \
-  --output ./workshop-host-discovery
-```
-
-Review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. The candidates separate `assetHosts` from network-only API, identity, telemetry, WebSocket, and image hosts. Perform one batch approval of the baseline candidate list with the owner or SOC; never treat candidates as approval. Add approved static hosts to `assetHosts` and approved network-only hosts to `approvedNetworkHosts`. Page hosts are already eligible to serve same-origin CAS assets. Do not use broad CDN or vendor wildcards merely to avoid review. If a specialized widget later exposes a new host, stop, review it, and retry only that widget after approval instead of repeating the full suite.
-
-Then run strict capture:
-
-```bash
-node scripts/capture-static-assets.mjs \
-  --mode capture \
-  --scope ./workshop-capture-scope.json \
+node scripts/capture-static-assets.mjs --mode capture \
+  --scope ./capture-scope.json \
   --endpoint http://127.0.0.1:9222 \
-  --ledger ./workshop-task-ledger.ndjson \
-  --output ./authorized-static-assets
-```
+  --ledger ./task-ledger.ndjson \
+  --output ./capture-run-1
 
-Reuse the same `--ledger` for every continuation run. Hard cumulative limits are optional: `0` disables a count or total-byte stop while the ledger continues to record actual usage. Keep a per-resource limit. A collector limit controls local retention, not browser traffic; the operator must stop UI actions when a safety threshold or stop condition is reached.
+node scripts/audit-capture.mjs ./capture-run-1
 
-Operate the browser through normal visible UI. Strict capture preflights visible page targets, attaches to pages, iframes, workers, shared workers, and service workers, then saves observed JS, CSS, WASM, and fonts by SHA-256. It ignores extension targets, rejects unrelated existing tabs, and reports attached targets, event counts, and the last network event through `status`. It rejects empty bodies, all-zero placeholders, HTML returned as JS/CSS, invalid WASM/font magic, and configured size/count budgets. Add images only when explicitly in scope.
-
-Use terminal markers to correlate components and assets:
-
-```text
-mark P2:ObjectTable:mounted
-mark P2:ObjectTable:filter-open
-status
-quit
-```
-
-Bind a marker at request start. A delayed response must remain associated with the component state that initiated it, even if the operator has since announced another marker.
-
-Do not save raw HTML, XHR, GraphQL, WebSocket payloads, routes, feature flags, user configuration, or API bodies. When separately authorized, a Workshop manifest review may retain only Build ID, relative CAS asset paths, and visible plugin name/type fields; raw HTML and all other fields must be discarded. Static asset capture remains the default.
-
-Do not clear cache between components. Use one approved cold-profile run followed by at most one warm verification run when the scope requires it. The collector never triggers reload; perform any approved reload visibly in Chrome after capture starts.
-
-Run the offline integrity check after every capture. If strict capture stops on a newly observed host, review it, update the Scope only after approval, and start a new output directory with the same ledger. Never retry automatically.
-
-```bash
-node scripts/audit-capture.mjs ./authorized-static-assets
-```
-
-After the approved runs finish, create one deduplicated offline delivery and audit it. The merge must refuse known Workshop Build ID mismatches:
-
-```bash
 node scripts/merge-captures.mjs \
-  --output ./authorized-static-assets-merged \
-  ./authorized-static-assets-run-1 \
-  ./authorized-static-assets-run-2
+  --output ./capture-merged ./capture-run-1 ./capture-run-2
 
-node scripts/audit-capture.mjs ./authorized-static-assets-merged
+node scripts/audit-capture.mjs ./capture-merged
 ```
 
 ## Stop and report
 
-Stop immediately on `401`, `403`, `429`, authentication challenges, account warnings, unexpected writes, unapproved hosts, elevated `5xx`, or an SOC request. Do not retry automatically.
+Stop immediately on `401`, `403`, `429`, CAPTCHA/MFA, authentication challenges, account warnings, unexpected writes, unapproved hosts, repeated `5xx`, traffic ceiling exhaustion, or an owner/SOC request. Do not retry automatically.
 
-Return the merged output directory and summarize `merge-summary.json`, task-ledger usage, `risk-events.ndjson`, `invalid-assets.ndjson`, `asset-audit.json`, body failures, captured types, and component markers. State clearly that the result contains observed production artifacts, not complete source code or untriggered branches.
+Return the merged output and summarize `merge-summary.json`, ledger usage, `risk-events.ndjson`, `invalid-assets.ndjson`, `asset-audit.json`, body failures, captured types, and markers. State that the result contains observed deployed static artifacts, not source code or untriggered branches.
 
-## Common mistakes
-
-| Mistake | Required response |
-|---|---|
-| Body unavailable from cache | Record metadata; do not refetch |
-| Unknown CDN | Run discovery, obtain approval, then add it to the Scope file |
-| API hosts appear one by one in capture | Discovery was incomplete; review `observed-network-hosts.json` and approve one candidate Scope batch |
-| Several continuation runs | Reuse one ledger and merge outputs offline by SHA-256 |
-| Unrelated browser tab | Close it before startup; target preflight must pass |
-| All-zero or HTML body | Leave it out of `assets/`; inspect `invalid-assets.ndjson` |
-| CDN host missing from scope | Pause and obtain scope approval |
-| User asks to avoid detection | Reframe as authorization, fixed limits, SOC visibility, and stop conditions |
-| Fifty components loaded together | Split into auditable batches and mount each lazy state |
-| Need exact component-to-chunk mapping | Use markers and set differences; shared chunks are not one-to-one |
+Use these coverage labels when reporting Workshop results: `visible-and-covered`, `visible-not-covered`, and `registered-not-visible`.

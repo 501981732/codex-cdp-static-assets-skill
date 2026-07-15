@@ -260,6 +260,40 @@ test('skill defaults to operator-driven UI with Codex-managed capture and option
   }
 });
 
+test('Workshop workflow uses a baseline gate and one collector per batch', async () => {
+  const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
+  const runbook = await readFile(new URL('../references/workshop-runbook.md', import.meta.url), 'utf8');
+  const combined = `${skill}\n${runbook}`.toLowerCase();
+  for (const requirement of [
+    'baseline classification gate',
+    'preloaded',
+    'lazy-load batches',
+    'keep one collector running for the whole batch',
+    'one marker per batch',
+    'component-level markers are optional',
+    'audit every run',
+    'merge once at the end',
+  ]) {
+    assert.equal(combined.includes(requirement), true, `missing Workshop workflow requirement: ${requirement}`);
+  }
+});
+
+test('workflow makes autosave and discovery cache tradeoffs explicit', async () => {
+  const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
+  const scopeReference = await readFile(new URL('../references/scope-config.md', import.meta.url), 'utf8');
+  const runbook = await readFile(new URL('../references/workshop-runbook.md', import.meta.url), 'utf8');
+  const combined = `${skill}\n${scopeReference}\n${runbook}`.toLowerCase();
+  for (const requirement of [
+    'component addition may autosave',
+    'written scope must explicitly allow',
+    'same-profile capture accepts body-unavailable gaps',
+    'fresh capture profile requires owner approval',
+    'never clear cache',
+  ]) {
+    assert.equal(combined.includes(requirement), true, `missing safety guidance: ${requirement}`);
+  }
+});
+
 test('Chinese README is a conversation-first Codex user manual', async () => {
   const readme = await readFile(new URL('../../../README.md', import.meta.url), 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return null;
@@ -270,16 +304,36 @@ test('Chinese README is a conversation-first Codex user manual', async () => {
     '30 秒开始',
     '$codex-cdp-static-assets-skill',
     '你只操作可见 Chrome',
-    'Marker 已就绪',
-    '开始 P2:ObjectTable:edit-mounted',
+    '严格基线完成',
+    '基线判断',
+    '一个批次只启动一次采集器',
+    'P1 完成',
+    '全部完成',
     '不需要预先知道 CDN',
-    '重试当前 Widget',
-    'Codex 应该返回',
     '完成验收',
   ]) {
     assert.equal(readme.includes(requirement), true, `README missing Codex user guidance: ${requirement}`);
   }
+  assert.equal(readme.split('\n').length <= 280, true, 'Chinese README should stay concise');
+  assert.equal(readme.includes('开始 P2:ObjectTable:edit-mounted'), false, 'README must not require per-component markers by default');
   assert.equal(readme.includes('$capture-static-assets-cdp'), false, 'README must not advertise the retired invocation name');
+});
+
+test('English README describes the same simple Workshop workflow', async () => {
+  const readme = await readFile(new URL('../../../README.en.md', import.meta.url), 'utf8').catch((error) => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (readme === null) return;
+  for (const requirement of [
+    'baseline classification gate',
+    'keep one collector running for the whole batch',
+    'component addition may autosave',
+    'same-profile capture accepts body-unavailable gaps',
+  ]) {
+    assert.equal(readme.toLowerCase().includes(requirement), true, `English README missing guidance: ${requirement}`);
+  }
+  assert.equal(readme.split('\n').length <= 190, true, 'English README should stay concise');
 });
 
 test('skill identity matches the public repository name', async () => {

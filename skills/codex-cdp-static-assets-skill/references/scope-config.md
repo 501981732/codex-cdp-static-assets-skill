@@ -1,10 +1,16 @@
 # Scope Configuration
 
-Use a JSON Scope file for every Workshop capture. It is both the execution boundary and the audit record. Hard cumulative limits are optional; use `0` for record-only count or total-byte tracking, while retaining a nonzero per-resource memory and disk guard.
+Use a JSON Scope file for every live session. It is both the execution boundary and the audit record.
 
-## Discovery scope
+## Written authorization
 
-Use only the page host. Discovery records metadata for all naturally observed HTTP(S) and WebSocket hosts and separately identifies static resource hosts; it never reads response bodies.
+Record the case ID, test account, page host, time window, owner/SOC contact, allowed UI scenarios, permitted asset types, traffic ceiling, and stop conditions.
+
+Component addition may autosave. Written scope must explicitly allow creating or editing the dedicated test module and that autosave. Unless separately approved, forbid publish, action, workflow, export, delete, permission-change, and production-writeback behavior.
+
+## Discovery Scope
+
+Start with only the page host. Discovery records naturally observed HTTP(S) and WebSocket host metadata; it never reads response bodies.
 
 ```json
 {
@@ -20,11 +26,11 @@ Use only the page host. Discovery records metadata for all naturally observed HT
 }
 ```
 
-Run `--mode discover`, operate the approved page normally, then review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. This is evidence gathering, not automatic trust. The candidate file supports one batch approval; it must not save bodies, enumerate URLs, retry a resource, or update an approved Scope automatically.
+After one representative discovery pass, review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. Candidates are evidence for one batch approval, never automatic trust.
 
-## Capture scope
+## Capture Scope
 
-Add each approved CDN to `assetHosts`. `pageHosts` are automatically eligible to serve static assets. Use `approvedNetworkHosts` only for separately approved endpoints needed for normal page operation but whose bodies must never be saved.
+Add exact approved static hosts to `assetHosts`. Page hosts may serve same-origin assets. Put separately approved normal page dependencies whose bodies must not be saved in `approvedNetworkHosts`.
 
 ```json
 {
@@ -42,29 +48,34 @@ Add each approved CDN to `assetHosts`. `pageHosts` are automatically eligible to
 }
 ```
 
-Do not use `*.vendor.com`, `*.cloudfront.net`, or an allow-any option as a shortcut. If a new static host appears in capture mode, stop, review the evidence, and update the Scope before the next approved run.
+Do not use broad CDN/vendor wildcards or allow-any. Stop on a new host and approve its exact hostname before a new run.
 
-Use the same append-only task ledger for every strict run:
+Reuse one append-only ledger for every strict run:
 
 ```bash
-node scripts/capture-static-assets.mjs \
-  --mode capture \
+node scripts/capture-static-assets.mjs --mode capture \
   --scope ./capture-scope.json \
   --ledger ./task-ledger.ndjson \
   --output ./capture-run-1
 ```
 
-Keep the original limits in the Scope. The ledger carries consumed resource count and decoded bytes across runs and rejects a mismatched `caseId`, including when hard totals are disabled. These counters describe retained response bodies; they are not a substitute for an owner-defined request/QPS ceiling or for stopping browser actions.
+Hard cumulative limits are optional. `0` disables a retained asset-count or total-byte stop, but the ledger still records decoded bodies and rejects a mismatched `caseId`. Keep a nonzero per-resource guard. Retention limits do not replace an owner-defined request, traffic, or time ceiling.
+
+## Cache Decision
+
+- Default: same-profile capture accepts body-unavailable gaps created by discovery or normal browser caching. Record the gap and do not refetch.
+- Exception: fresh capture profile requires owner approval when body completeness is necessary. Retire the discovery profile first, use one new dedicated profile, and log in normally. Do not transfer cookies or run both profiles together.
+- Always: never clear cache, disable cache, bypass the Service Worker, or replay a resource URL.
 
 ## Outputs
 
-- `observed-hosts.ndjson` and `observed-hosts.json`: discovery-only host evidence
-- `observed-network-hosts.ndjson` and `observed-network-hosts.json`: HTTP(S) and WebSocket host evidence, including API and identity endpoints
-- `scope-candidates.json`: unapproved exact-host candidates separated into asset and network-only lists
-- `task-ledger.ndjson`: append-only cumulative count and byte budget evidence
-- `manifest.ndjson`: accepted assets with local content hash
-- `invalid-assets.ndjson`: rejected body and budget events
-- `risk-events.ndjson`: status or scope failures
-- `asset-audit.json`: offline revalidation of saved assets
-- `merge-summary.json`: deduplicated multi-run delivery summary generated by `merge-captures.mjs`
-- `summary.json`: run counters plus any Workshop Build IDs detected in saved JavaScript
+- `observed-network-hosts.json`: all discovered network hosts
+- `observed-hosts.json`: discovered static-resource hosts
+- `scope-candidates.json`: exact unapproved asset and network-only candidates
+- `task-ledger.ndjson`: cumulative retained-body usage
+- `manifest.ndjson`: accepted assets and hashes
+- `invalid-assets.ndjson`: rejected bodies and budget events
+- `risk-events.ndjson`: status, target, and scope failures
+- `asset-audit.json`: offline integrity results
+- `merge-summary.json`: deduplicated delivery summary from `merge-captures.mjs`
+- `summary.json`: run counters and detected Workshop Build IDs

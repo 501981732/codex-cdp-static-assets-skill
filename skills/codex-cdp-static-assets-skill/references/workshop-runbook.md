@@ -2,79 +2,66 @@
 
 ## Goal
 
-Collect production static assets naturally loaded while an authorized test account mounts and exercises approved component states. Optimize for auditable coverage, not stealth or theoretical completeness.
+Inventory deployed static assets naturally loaded by an authorized test account. Optimize for low intrusion and auditable coverage, not stealth or theoretical completeness.
 
-## Project layout
+The operator controls the visible browser. Codex manages the collector, status, markers, stop decisions, audits, and offline merge. The collector must not drive the page, inspect the DOM, or execute page code.
 
-Create one dedicated test module with an empty baseline page plus 5-7 test pages, each containing roughly 8-10 related components:
+## Prepare
 
-| Batch | Typical content |
-|---|---|
-| P0 | Empty Workshop shell and navigation baseline |
-| P1 | Layout, text, inputs, buttons, tabs |
-| P2 | Tables, lists, object views, filters |
-| P3 | Charts, maps, timelines, media |
-| P4 | Dialogs, drawers, menus, actions |
-| P5+ | Embeds, permissions, workflows, specialized components |
+Use one dedicated test module with synthetic data. Component addition may autosave, so written scope must explicitly allow module/page creation, editing, and autosave. Do not publish, execute actions/workflows, export, change permissions, delete data, or write to production unless those actions are separately authorized.
 
-Use synthetic data. Avoid real customer or production records. Do not place all components on one page: it creates a burst, obscures attribution, and may still leave collapsed lazy states unmounted.
+Prepare an empty baseline page. Create batch pages only after the baseline classification gate says the application is actually lazy loading component bundles.
 
-The operator controls the visible browser. Codex manages the collector, enters markers from the operator's chat checkpoints, checks status and stop conditions, and runs audits. The collector must not add components, click controls, inspect the DOM, or execute page code.
+## Run
 
-## Capture sequence
+1. Log in before starting discovery. Close unrelated tabs and use one approved visible page.
+2. Run discovery once with the page-only Scope. Open the empty Workshop and representative navigation through the visible UI.
+3. Review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. Obtain one batch approval for exact hosts and create the strict Scope.
+4. Start strict capture with the shared `--ledger`. Mark `P0:baseline`, visibly refresh or open the empty page, and let it settle.
+5. Run the baseline classification gate offline:
+   - `preloaded`: many widget/component/plugin bundles already appear. Stop bulk additions, build the inventory offline, and validate only 1-3 representative components if useful.
+   - `lazy`: mainly shell assets appear. Continue with lazy-load batches.
+6. For lazy-load batches, place roughly 5-10 related components on a page. Keep one collector running for the whole batch, including edit/configuration and preview/runtime states. Do not stop it between components.
+7. Use one marker per batch by default, such as `P1:table-filter`. Component-level markers are optional for important ambiguous mappings.
+8. Audit every run. Inspect `risk-events.ndjson`, `invalid-assets.ndjson`, and ledger usage before continuing.
+9. Reuse the ledger for approved continuation runs. Merge once at the end with `merge-captures.mjs`, then audit the merged output.
 
-1. Log in before starting discovery with the dedicated profile. Close unrelated tabs and leave one `about:blank` tab after authentication.
-2. Start `--mode discover` with a page-only Scope, then navigate that same visible tab to the approved empty Workshop page. Discover the baseline shell and representative navigation, not every widget.
-3. Review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`; obtain one batch approval for exact baseline static and network-only hosts, then write the strict capture Scope. Same-origin CAS paths need no separate CDN guess. If a later widget exposes a new host, stop and review it, then retry only that widget after approval.
-4. Start strict capture with one shared `--ledger` before the approved page load. Mark `P0:baseline`, open the empty page visibly, and wait until no new static-resource requests appear for 3–5 seconds.
-5. Open one batch and mark its page mount.
-6. Before each component state, Codex enters a marker such as `mark P2:ObjectTable:filter-open` after the operator announces the checkpoint in chat.
-7. The operator triggers only normal UI states: activate tabs, expand accordions, open dialogs, expose virtualized/viewport content, and wait for data-backed rendering. Cover edit/configuration and preview/runtime states without executing action, workflow, writeback, publish, or export behavior.
-8. Wait for 3–5 seconds of static-resource quiet before the next marker. Use fixed, operator-reviewable pacing; do not add random jitter.
-9. End after 8–10 components, inspect `risk-events.ndjson`, `invalid-assets.ndjson`, and ledger remaining budget, then continue only within the approved window.
-10. Run `audit-capture.mjs` after every stop. Reuse the same ledger for approved continuation runs, then run `merge-captures.mjs` and audit the merged directory. Run at most one warm-cache verification pass when required.
+If an unknown host appears, stop. Review and approve the exact host, then retry only the affected batch or component. Do not repeat completed batches.
 
-## Coverage model
+## Cache Choice
 
-Maintain a component checklist with these fields:
+The lowest-intrusion default is same-profile capture accepts body-unavailable gaps after discovery. Never clear cache or refetch missing bodies.
+
+If complete response bodies are required, a fresh capture profile requires owner approval. Retire the discovery profile first and perform one normal login in the new dedicated profile. A second login may receive additional account review, so it is an explicit exception, not the default.
+
+## Suggested Chat Checkpoints
 
 ```text
-project,page,component,state,marker,result,started_at,ended_at,notes
+已登录并打开空白 Workshop
+发现刷新完成
+批准全部候选
+严格基线完成
+P1 完成
+P2 完成
+全部完成
 ```
 
-Derive associations from ordered first appearance:
+Codex should report the baseline decision before asking for `P1` work. A preloaded result normally ends bulk component addition.
 
-```text
-component delta = asset hashes after marker - asset hashes before marker
-```
+## Coverage
 
-Label assets as `baseline`, `shared`, `first-seen`, or `unmapped`. Shared bundles make exact one-component-to-one-chunk mapping impossible. Create a single-component verification page only for important ambiguous cases; do not rerun all components in isolated profiles.
+Use three simple classes:
 
-Maintain three coverage classes:
+- `visible-and-covered`: visible to the test account and exercised normally
+- `visible-not-covered`: visible but outside the approved window
+- `registered-not-visible`: known only from separately approved sanitized metadata; do not expose it through hidden routes or permission changes
 
-- `visible-and-covered`: visible in the current account's Workshop palette and exercised normally
-- `visible-not-covered`: visible but not exercised in the approved window
-- `registered-not-visible`: present in separately approved sanitized manifest metadata but not visible; never trigger it through hidden routes or permission changes
+Shared bundles make exact component-to-chunk mapping unreliable. Use marker-based first appearance only as evidence, not proof of ownership. Create a single-component validation page only for an important ambiguous component.
 
-Do not save raw HTML. If manifest metadata review is separately approved, retain only Build ID, relative CAS paths, and plugin name/type; discard routes, feature flags, user configuration, and the source document.
+Do not save raw HTML. If manifest review is separately approved, retain only Build ID, relative CAS paths, and visible plugin name/type fields.
 
-## Load controls
+## Stop Conditions
 
-- One test account, one visible profile, one tab, one UI action at a time.
-- Check `status` before UI work; stop if target counts, event counts, or the last network event do not match the visible tab.
-- Use the owner's QPS/request/traffic ceiling. Hard asset count and retained-byte limits may be disabled because they do not stop browser traffic; keep the ledger, per-resource guard, small component batches, and operator stop control. In the absence of an owner ceiling, pause for a defined limit instead of inventing a "safe" anti-detection interval.
-- Coordinate the time window and expected navigation path with SOC.
-- Never perform writes, publish actions, exports, deletes, or permission changes unless separately authorized.
+Stop without retry on `401`, `403`, `429`, CAPTCHA/MFA, logout, account warning, unapproved host, unexpected write, repeated `5xx`, owner traffic ceiling, or owner/SOC instruction.
 
-## Stop conditions
-
-Stop without retry on `401`, `403`, `429`, CAPTCHA/MFA, unexpected logout, account warning, unapproved domain, write side effect, repeated `5xx`, traffic-budget exhaustion, or SOC instruction. Preserve logs and report the point of interruption.
-
-## Deliverables
-
-- Deduplicated JS, CSS, WASM, fonts, and optional images
-- `merge-summary.json` and the shared task ledger proving cumulative budget use
-- `manifest.ndjson` with redacted URLs, hashes, sizes, cache source, target type, and marker
-- `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `asset-audit.json`, `provenance.json`, and `summary.json`
-- Component coverage sheet and component-to-asset matrix
-- Explicit limitations: unmounted states, unauthorized roles, backend code, original sources, and unrequested sourcemaps are absent
+The final delivery contains observed deployed JS, CSS, WASM, fonts, and optional approved images. It does not contain original source, backend code, unmounted states, unauthorized roles, or unrequested sourcemaps.
