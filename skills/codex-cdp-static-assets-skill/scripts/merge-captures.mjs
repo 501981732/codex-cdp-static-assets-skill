@@ -4,6 +4,8 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildComponentCoverage } from './component-coverage.mjs';
+
 async function readNdjson(path) {
   try {
     const content = await readFile(path, 'utf8');
@@ -47,6 +49,7 @@ function fallbackExtension(entry) {
   if (entry.kind === 'css') return '.css';
   if (entry.kind === 'wasm') return '.wasm';
   if (entry.kind === 'font') return '.font';
+  if (entry.kind === 'html') return '.html';
   return '.bin';
 }
 
@@ -88,11 +91,15 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   const invalid = [];
   const markers = [];
   const summaries = [];
+  const componentEvents = [];
+  const sourceManifest = [];
   let savedEvents = 0;
 
   for (const [index, input] of inputs.entries()) {
     const sourceRun = basename(input);
     const manifest = await readNdjson(join(input, 'manifest.ndjson'));
+    sourceManifest.push(...manifest.map((entry) => ({ sourceRun, ...entry })));
+    componentEvents.push(...(await readNdjson(join(input, 'component-events.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
     const summary = inputSummaries[index];
     if (summary) summaries.push({ sourceRun, ...summary });
     risks.push(...(await readNdjson(join(input, 'risk-events.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
@@ -147,8 +154,10 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
     }
   }
 
+  const createdAt = new Date().toISOString();
+  const componentCoverage = buildComponentCoverage({ componentEvents, manifestEvents: sourceManifest, generatedAt: createdAt });
   const summary = {
-    createdAt: new Date().toISOString(),
+    createdAt,
     sourceRuns: inputs.map((input) => basename(input)),
     runCount: inputs.length,
     savedEvents,
@@ -162,13 +171,17 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
     riskEvents: risks.length,
     invalidEvents: invalid.length,
     workshopBuildIds: knownWorkshopBuildIds,
+    components: componentCoverage.summary,
   };
 
   await writeFile(join(metadata, 'manifest.ndjson'), ndjson(mergedManifest));
   await writeFile(join(metadata, 'risk-events.ndjson'), ndjson(risks));
   await writeFile(join(metadata, 'invalid-assets.ndjson'), ndjson(invalid));
   await writeFile(join(metadata, 'markers.ndjson'), ndjson(markers));
+  await writeFile(join(metadata, 'source-manifest.ndjson'), ndjson(sourceManifest));
+  await writeFile(join(metadata, 'component-events.ndjson'), ndjson(componentEvents));
   await writeFile(join(metadata, 'merge-summary.json'), JSON.stringify(summary, null, 2));
+  await writeFile(join(output, 'component-assets.json'), JSON.stringify(componentCoverage, null, 2));
   return summary;
 }
 

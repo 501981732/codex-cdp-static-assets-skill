@@ -43,10 +43,37 @@ test('merges capture runs by SHA-256 and preserves aggregate evidence', async ()
     capturedBytes: 14,
   });
 
-  const mergedManifest = (await readFile(join(output, 'manifest.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+  const mergedManifest = (await readFile(join(output, 'metadata', 'manifest.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(mergedManifest.length, 2);
   assert.deepEqual(mergedManifest.find((item) => item.sha256 === 'same').markers, ['P0', 'P1']);
-  assert.equal((await readFile(join(output, 'risk-events.ndjson'), 'utf8')).includes('api.example.com'), true);
+  assert.equal((await readFile(join(output, 'metadata', 'risk-events.ndjson'), 'utf8')).includes('api.example.com'), true);
+});
+
+test('merges source-run component events into component-assets.json', async () => {
+  const { mergeCaptureDirectories } = await import(new URL('./merge-captures.mjs', import.meta.url));
+  const root = await mkdtemp(join(tmpdir(), 'merge-component-assets-'));
+  const run = join(root, 'capture-run-1');
+  const output = join(root, 'merged');
+  await mkdir(join(run, 'assets', 'js'), { recursive: true });
+  await writeFile(join(run, 'assets', 'js', 'widget.js'), 'widget');
+  const marker = 'widget:object-table:a1b2c3d4:editor-mounted';
+  await writeFile(join(run, 'manifest.ndjson'), `${JSON.stringify({
+    at: '2026-07-21T00:00:01.000Z', event: 'saved', marker, kind: 'js', sha256: 'widget',
+    url: 'https://cdn.example/widget.js', size: 6, file: 'assets/js/widget.js',
+  })}\n`);
+  await writeFile(join(run, 'component-events.ndjson'), `${JSON.stringify({
+    caseId: 'SEC-1', widgetKey: 'tables/object-table/v1', label: 'Object Table', category: 'Tables',
+    capturePage: 'CDP Capture 001', visibleInstanceLabel: 'Object Table', marker,
+    state: 'editor-mounted', status: 'captured', required: true,
+    attemptId: 'capture-run-1:editor-mounted:1', at: '2026-07-21T00:00:01.000Z', failure: null,
+  })}\n`);
+
+  const summary = await mergeCaptureDirectories([run], output);
+  const coverage = JSON.parse(await readFile(join(output, 'component-assets.json'), 'utf8'));
+  const mergedEvents = (await readFile(join(output, 'metadata', 'component-events.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.equal(coverage.components[0].attempts[0].sourceRun, 'capture-run-1');
+  assert.equal(mergedEvents[0].sourceRun, 'capture-run-1');
+  assert.deepEqual(summary.components, { total: 1, complete: 0, partial: 1 });
 });
 
 test('refuses to merge capture runs from different known Workshop builds', async () => {
