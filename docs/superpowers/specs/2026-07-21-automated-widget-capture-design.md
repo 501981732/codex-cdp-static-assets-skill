@@ -1,102 +1,102 @@
-# Automated Widget Static-Asset Capture Design
+# Widget 静态资源自动采集设计
 
-## Objective
+## 目标
 
-Extend `codex-cdp-static-assets-skill` so one explicit run authorization can start an unattended Workshop capture. Codex will use Chrome DevTools MCP to enumerate the visible Add Widget catalog, add widgets one at a time, capture newly observed static responses, and continue without per-widget confirmation.
+扩展 `codex-cdp-static-assets-skill`，使一次明确的运行授权即可启动无人值守的 Workshop 采集。Codex 使用 Chrome DevTools MCP 遍历可见的 Add Widget 目录，逐个添加 Widget，采集每个 Widget 首次触发的静态资源响应，并自动继续，无需逐组件确认。
 
-The result is evidence of resources observed when each widget was exercised. It is not a claim that a shared bundle belongs exclusively to that widget.
+采集结果表示“操作该 Widget 时实际观察到的资源”，不能据此断言共享 Bundle 仅归属于该 Widget。
 
-## Source of Truth
+## 唯一事实源
 
-Implement the change in this repository on `feat/automated-widget-capture`. After validation, copy the same skill tree to both installed locations:
+在本仓库的 `feat/automated-widget-capture` 分支实现。验证通过后，将同一份 Skill 目录同步到两个本地安装位置：
 
 - `~/.codex/skills/codex-cdp-static-assets-skill`
 - `~/.agents/skills/codex-cdp-static-assets-skill`
 
-Do not edit an installed copy as the source of truth.
+不得把本地安装副本作为源码直接修改。
 
-## Run Authorization
+## 运行授权
 
-Require one consolidated authorization before any UI mutation or response-body retention. Record:
+任何 UI 写操作或响应正文留存之前，都必须取得一次汇总授权。授权记录包括：
 
-- case ID, test account, exact page host, time window, test module, and stop contact;
-- exact discovered asset and approved network hosts;
-- permitted resource types and byte/count limits;
-- permission to edit the dedicated test module and allow autosave;
-- permitted automated UI actions;
-- widget states to exercise: `editor`, `config`, and/or `preview`;
-- forbidden actions and stop conditions.
+- Case ID、测试账号、精确页面主机、时间窗口、测试 Module 和停止联系人；
+- 发现到的精确资源主机与已批准网络主机；
+- 允许的资源类型以及字节数、资源数上限；
+- 编辑专用测试 Module 及允许自动保存的权限；
+- 允许自动执行的 UI 操作；
+- 要覆盖的 Widget 状态：`editor`、`config` 和/或 `preview`；
+- 禁止动作和停止条件。
 
-Discovery may select the exact approved page, inspect its accessibility snapshot, and list Network metadata without retaining bodies. Present all exact host candidates and the automated action set together. After approval, do not request per-widget checkpoints.
+发现阶段可以选择唯一获批页面、在内存中检查无障碍快照并列出 Network 元数据，但不能留存响应正文。系统应一次性展示全部精确主机候选和自动化动作集合。用户批准后，不再设置逐 Widget 检查点。
 
-Unknown hosts are never silently approved. A new host encountered after authorization stops the run and requires a new authorization before continuation.
+不得静默批准未知主机。授权后若出现新主机，立即停止；只有取得新的授权后才能继续。
 
-The state selection is run-wide. If omitted, default to `editor` only. For each selected state, exercise it when the visible widget UI supports it and otherwise record `not-applicable`; do not infer or expose hidden configuration or preview routes.
+Widget 状态选择属于整次运行配置。未指定时默认只覆盖 `editor`。对每个选定状态，仅在可见 Widget UI 确实支持时执行；否则记录为 `not-applicable`，不得推测或暴露隐藏配置、预览路由。
 
-## Automated UI Boundary
+## 自动化 UI 边界
 
-Permit only visible, same-page actions required for capture:
+仅允许执行采集所需的可见、同页面操作：
 
-- reload or revisit the exact approved page;
-- take accessibility snapshots in memory;
-- click, search, scroll, and use keyboard navigation;
-- open Add Widget and select a visible catalog entry;
-- drag and drop when adding requires it;
-- open widget configuration or preview when included in Scope;
-- wait for visible state and Network stability.
+- 刷新或重新访问精确获批页面；
+- 在内存中获取无障碍快照；
+- 点击、搜索、滚动和键盘导航；
+- 打开 Add Widget 并选择可见目录项；
+- 添加 Widget 必须使用拖放时执行拖放；
+- Scope 明确包含时，打开 Widget 配置或预览；
+- 等待可见状态和 Network 稳定。
 
-Do not persist accessibility snapshots or unrelated tab metadata.
+不得持久化无障碍快照或无关标签页元数据。
 
-Prohibit:
+禁止执行：
 
-- `evaluate_script`, page-context JavaScript, hidden route discovery, DOM/source extraction, or internal registry enumeration;
-- publishing, executing Actions or Workflows, exports, permission changes, production writeback, or business-data deletion;
-- blind retries after an ambiguous add operation;
-- cache clearing, cache disabling, Service Worker bypass, request interception, URL replay, chunk guessing, or sourcemap probing;
-- cookie, token, password, request-body, or browser-profile extraction.
+- `evaluate_script`、页面上下文 JavaScript、隐藏路由发现、DOM/源码提取或内部注册表枚举；
+- 发布、执行 Action 或 Workflow、导出、修改权限、生产回写或删除业务数据；
+- 添加结果不明确时盲目重试；
+- 清理或禁用缓存、绕过 Service Worker、拦截请求、重放 URL、猜测 Chunk 或探测 sourcemap；
+- 提取 Cookie、Token、密码、请求正文或浏览器 Profile。
 
-## Resource Scope
+## 资源范围
 
-Support `js`, `css`, `wasm`, `font`, `image`, and `html`.
+支持 `js`、`css`、`wasm`、`font`、`image` 和 `html`。
 
-Accept HTML only when all of the following hold:
+HTML 只有同时满足以下条件时才允许保留：
 
-- the resource type is `document`;
-- the MIME type is `text/html` or `application/xhtml+xml`;
-- the response was naturally loaded by the approved top-level page or a widget iframe;
-- the exact response host is approved;
-- the request is a completed `GET` without a request body.
+- 资源类型为 `document`；
+- MIME 类型为 `text/html` 或 `application/xhtml+xml`；
+- 响应由获批顶层页面或 Widget iframe 自然加载；
+- 响应的精确主机已获批准；
+- 请求为已完成且不带请求正文的 `GET`。
 
-Do not retain HTML returned by `xhr`, `fetch`, or API calls. Continue to reject HTML bodies misclassified as JavaScript or CSS. Store accepted HTML with the same query redaction, SHA-256, ledger, size checks, and audit rules used for other assets.
+不得保留 `xhr`、`fetch` 或 API 返回的 HTML。JavaScript、CSS 响应中误返回的 HTML 仍必须拒绝。获批 HTML 使用与其他资源相同的查询参数脱敏、SHA-256、Ledger、大小限制和审计规则。
 
-## Capture Algorithm
+## 采集算法
 
-1. Attach to the unique page matching `pageHosts` and verify Chrome/MCP prerequisites.
-2. Run metadata-only discovery and obtain the single consolidated authorization.
-3. Capture and audit `baseline` before adding widgets. In automated mode, a `preloaded` baseline does not stop catalog traversal; it only classifies already observed assets as `baseline/shared`. Preserve the existing preloaded stop gate only for passive/manual mode.
-4. Open the visible Add Widget catalog and build an in-memory queue from accessibility snapshots. Do not use hidden registries:
-   - traverse visible categories in their displayed order;
-   - within each category, collect entries while scrolling the catalog panel with visible keyboard/scroll actions;
-   - treat enumeration as complete only after an `End`/bottom action and two consecutive snapshots produce no new canonical widget keys;
-   - derive each canonical key from the normalized visible label, visible category path, and visible version/type text when present;
-   - if those visible fields still collide, record a catalog-identity ambiguity and stop before mutating either entry; do not use occurrence order as identity;
-   - deduplicate by canonical key and derive the marker from its slug plus a short hash, never from catalog position.
-5. For each visible widget:
-   - assign a stable marker such as `widget:object-table:a1b2c3d4`;
-   - perform the visible add action once;
-   - inspect the page state before any retry; stop if the outcome is ambiguous;
-   - wait until Network request identity/status snapshots are unchanged across two consecutive polls, subject to the run timeout;
-   - inspect every observed host and status before reading bodies;
-   - import newly observed approved responses immediately and delete staging bodies;
-   - audit the run and append the widget result;
-   - continue automatically.
-6. Stop on a hard-stop event; otherwise merge once, build the component map, and audit the merged output.
+1. 连接唯一匹配 `pageHosts` 的页面，并验证 Chrome/MCP 前置条件。
+2. 执行仅含元数据的发现流程，取得一次汇总授权。
+3. 添加 Widget 前，采集并审计 `baseline`。在自动化模式下，`preloaded` 基线不能阻止目录遍历，只用于把已观察资源归类为 `baseline/shared`；现有的预加载停止门禁仅保留给被动/人工模式。
+4. 打开可见 Add Widget 目录，通过无障碍快照构建内存队列，不使用隐藏注册表：
+   - 按页面展示顺序遍历可见分类；
+   - 在每个分类内，通过可见的键盘或滚动操作滚动目录面板并收集目录项；
+   - 只有执行 `End`/到底操作后，连续两次快照都没有出现新的规范 Widget Key，才视为枚举完成；
+   - 使用规范化的可见名称、可见分类路径，以及存在时的可见版本/类型文本生成规范 Widget Key；
+   - 如果这些可见字段仍然冲突，记录目录身份歧义并在修改任一目录项前停止；不得使用出现顺序作为身份；
+   - 按规范 Widget Key 去重，Marker 由其 slug 和短哈希生成，不能使用目录位置。
+5. 对每个可见 Widget：
+   - 分配稳定 Marker，例如 `widget:object-table:a1b2c3d4`；
+   - 只执行一次可见添加动作；
+   - 任何重试前先检查页面状态；结果不明确时停止；
+   - 在运行超时时间内，等待 Network 请求身份和状态连续两次轮询保持不变；
+   - 读取正文前检查所有已观察主机和状态；
+   - 立即导入新观察到的获批响应，并删除暂存正文；
+   - 审计本轮结果，追加 Widget 记录；
+   - 自动继续下一个 Widget。
+6. 发生硬停止事件时立即停止；否则只合并一次，生成组件映射并审计合并结果。
 
-The automation may create additional capture pages only when page creation and autosave are explicitly authorized. It must not delete those pages automatically. Resume compares canonical widget keys, not catalog order, so reordering does not skip or duplicate completed widgets.
+只有 Scope 明确允许创建页面和自动保存时，自动化流程才能创建新的采集页面。不得自动删除这些页面。恢复运行时按规范 Widget Key 对比，而不是按目录顺序判断，因此目录重新排序不会跳过或重复已完成 Widget。
 
-## Attribution and Output
+## 归属与输出
 
-Keep the existing content-addressed asset storage and manifest. Add a versioned `component-assets.json`:
+保留现有内容寻址资源存储和 Manifest，新增带版本的 `component-assets.json`：
 
 ```json
 {
@@ -136,60 +136,60 @@ Keep the existing content-addressed asset storage and manifest. Add a versioned 
 }
 ```
 
-Always emit the baseline record. Emit one component record for every attempted canonical widget key, including failed attempts. During merge, consolidate component records by `widgetKey`; deduplicate assets by `(sha256, redacted URL)`, preserve the earliest first-observed marker, union body-unavailable entries, retain all distinct failures, and append every attempt ordered by `(at, sourceRun)`.
+始终输出 baseline 记录。每个尝试过的规范 Widget Key 都必须输出一条组件记录，包括失败尝试。合并时按 `widgetKey` 汇总组件记录；按 `(sha256, 脱敏 URL)` 去重资源；保留最早的首次观察 Marker；合并全部 `bodyUnavailable` 条目；保留所有不同失败；按 `(at, sourceRun)` 追加每次尝试。
 
-Resolve consolidated status deterministically: `captured` if any attempt completed capture, otherwise use the latest terminal attempt status. Resolve each requested state as `captured` if any attempt captured it; otherwise `failed` if an attempt failed it; otherwise `not-applicable`. Keep `not-requested` only when no run requested that state. Historical failures remain in `failures` and `attempts` even when a later attempt succeeds. Sort components by `widgetKey` and assets by `(kind, URL, sha256)` for deterministic output.
+汇总状态必须确定性计算：只要任一次尝试完成采集，组件状态即为 `captured`；否则使用最后一次终态尝试的状态。每个已请求状态只要任一次成功采集即为 `captured`；否则，任一次失败则为 `failed`；其余情况为 `not-applicable`。只有没有任何运行请求该状态时才保留 `not-requested`。即使后续尝试成功，历史失败仍保留在 `failures` 和 `attempts` 中。组件按 `widgetKey` 排序，资源按 `(kind, URL, sha256)` 排序，以确保输出稳定。
 
-Classify evidence as:
+证据分类如下：
 
-- `baseline/shared`: observed before any widget was added;
-- `first-observed`: first appeared under the widget marker;
-- `body-unavailable`: request observed but Chrome no longer exposed the response body;
-- `failed`: UI or capture failed with a recorded reason.
+- `baseline/shared`：添加任何 Widget 前已经观察到；
+- `first-observed`：首次在该 Widget Marker 下出现；
+- `body-unavailable`：观察到请求，但 Chrome 已无法提供响应正文；
+- `failed`：UI 或采集失败，并记录原因。
 
-Do not invent a `reused-by` relationship for cached resources that did not generate observable evidence.
+对于因缓存而没有产生可观察证据的资源，不得虚构 `reused-by` 关系。
 
-## Failure Handling
+## 失败处理
 
-Stop without automatic retry on:
+遇到以下情况停止且不自动重试：
 
-- unknown host, page leaving the approved host/module, or unapproved write;
-- `401`, `403`, `429`, repeated `5xx`, CAPTCHA, MFA, logout, or account warning;
-- ambiguous add result that could duplicate a widget;
-- owner traffic/time limit exhaustion;
-- owner/SOC instruction.
+- 未知主机、页面离开获批主机/Module，或出现未授权写操作；
+- `401`、`403`、`429`、重复 `5xx`、CAPTCHA、MFA、掉线或账号警告；
+- 添加结果不明确，可能造成 Widget 重复；
+- 达到授权方规定的流量或时间上限；
+- 授权方或 SOC 要求停止。
 
-Record the current widget key, last successful marker, observed status, risk event, and whether staged bodies were deleted. A later continuation under the same still-valid authorization reuses the ledger and skips widget keys already recorded as successful. It may retry a failed widget only when the prior record proves no widget was added; an ambiguous add remains a hard stop and cannot be retried automatically.
+记录当前 Widget Key、最后成功 Marker、观察状态、风险事件，以及暂存正文是否已删除。在同一份仍有效的授权下恢复时，复用 Ledger，并跳过已经成功记录的 Widget Key。只有之前的记录能够证明 Widget 未添加时，才能重试失败 Widget；添加结果不明确属于硬停止，不能自动重试。
 
-## Repository Changes
+## 仓库修改范围
 
-Update:
+更新：
 
-- `SKILL.md` for automated mode and the one-authorization workflow;
-- `references/scope-config.md` for automation permissions and HTML Scope;
-- `references/workshop-runbook.md` for unattended widget traversal;
-- `references/mcp-autoconnect.md` and `references/cdp-boundaries.md` for allowed MCP UI tools;
-- `agents/openai.yaml` for the new default prompt;
-- `README.md` and `README.en.md` for setup and invocation;
-- contract and importer tests;
-- importer, merge, and audit scripts as needed for HTML and `component-assets.json`.
+- `SKILL.md`：自动化模式和一次授权流程；
+- `references/scope-config.md`：自动化权限和 HTML Scope；
+- `references/workshop-runbook.md`：无人值守 Widget 遍历；
+- `references/mcp-autoconnect.md`、`references/cdp-boundaries.md`：允许使用的 MCP UI 工具；
+- `agents/openai.yaml`：新的默认提示词；
+- `README.md`、`README.en.md`：配置和调用方式；
+- 契约测试和 importer 测试；
+- 按 HTML 和 `component-assets.json` 需求修改 importer、merge、audit 脚本。
 
-## Verification
+## 验证
 
-Follow test-driven development:
+遵循测试驱动开发：
 
-1. Add failing contract tests that require automated UI tools, single authorization, HTML document capture, and the component map while rejecting `evaluate_script` and `xhr/fetch` HTML.
-2. Add failing unit tests for HTML classification, validation, extension, merge, resume behavior, and component mapping.
-3. Implement the minimum changes to pass.
-4. Run every `*.test.mjs`, the skill validator, diff checks between source and both installed copies, and an independent forward-test of the Skill instructions.
-5. Perform a live Workshop run only after the updated Skill is installed and the concrete run Scope is approved.
+1. 先添加失败的契约测试，要求支持自动化 UI 工具、一次授权、HTML document 采集和组件映射，同时继续禁止 `evaluate_script` 与 `xhr/fetch` HTML。
+2. 添加失败的单元测试，覆盖 HTML 分类、校验、扩展名、合并、恢复以及组件映射。
+3. 只实现使测试通过的最小修改。
+4. 运行全部 `*.test.mjs`、Skill 校验器、源码与两个安装副本的差异检查，并对 Skill 指令进行一次独立前向验证。
+5. 只有更新后的 Skill 已安装、具体运行 Scope 已获批准，才执行真实 Workshop 采集。
 
-## Completion Criteria
+## 完成标准
 
-- One authorization starts unattended visible widget traversal.
-- No normal per-widget confirmation is required.
-- Every successful widget has a marker and component-map entry.
-- Approved document HTML is captured; XHR/fetch HTML remains excluded.
-- Shared and first-observed evidence are not overstated as exclusive ownership.
-- Hard-stop conditions halt before further body reads or UI mutation.
-- Source tests, skill validation, installed-copy equality checks, and forward-test pass.
+- 一次授权即可启动无人值守的可见 Widget 遍历；
+- 正常流程不再逐 Widget 请求确认；
+- 每个成功 Widget 都有 Marker 和组件映射记录；
+- 获批 document HTML 能够采集，XHR/fetch HTML 继续排除；
+- 共享资源和首次观察证据不会被夸大为组件独占归属；
+- 硬停止条件会在继续读取正文或修改 UI 前终止流程；
+- 源码测试、Skill 校验、安装副本一致性检查和前向验证全部通过。
