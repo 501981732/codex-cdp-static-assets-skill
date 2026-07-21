@@ -1,4 +1,6 @@
-const DEFAULT_TYPES = new Set(['js', 'css', 'wasm', 'font']);
+import { normalizeAutomationPolicy } from './automation-policy.mjs';
+
+const DEFAULT_TYPES = new Set(['js', 'css', 'wasm', 'image', 'html']);
 const DEFAULT_LIMITS = { maxAssets: 0, maxTotalMiB: 0, maxAssetMiB: 50 };
 
 export function redactUrl(value) {
@@ -38,7 +40,7 @@ export function scopeHost(value, patterns) {
   }
 }
 
-export function normalizeScope(input) {
+export function normalizeScope(input, { now = new Date() } = {}) {
   const requiredArray = (value, field) => {
     if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item.trim())) {
       throw new Error(`Scope field ${field} must be an array of host patterns`);
@@ -57,8 +59,45 @@ export function normalizeScope(input) {
     throw new Error('Scope field stopOnStatuses must be an array of HTTP status codes');
   }
   const types = input.types ? new Set(requiredArray(input.types, 'types')) : new Set(DEFAULT_TYPES);
-  const validTypes = new Set(['js', 'css', 'wasm', 'font', 'image']);
+  const validTypes = new Set(['js', 'css', 'wasm', 'font', 'image', 'html']);
   for (const type of types) if (!validTypes.has(type)) throw new Error(`Unsupported scope type: ${type}`);
+  const automation = normalizeAutomationPolicy(input);
+  let authorization = null;
+  if (automation.enabled) {
+    const requireText = (value, field) => {
+      if (typeof value !== 'string' || !value.trim()) throw new Error(`Automation Scope requires ${field}`);
+      return value.trim();
+    };
+    const caseId = requireText(input.caseId, 'caseId');
+    const approvedPageUrl = new URL(requireText(input.approvedPageUrl, 'approvedPageUrl'));
+    if (!['http:', 'https:'].includes(approvedPageUrl.protocol) || approvedPageUrl.username || approvedPageUrl.password
+      || approvedPageUrl.search || approvedPageUrl.hash) {
+      throw new Error('approvedPageUrl must be an exact HTTP(S) URL without credentials, query, or fragment');
+    }
+    const exactPageHost = pageHosts.some((host) => !host.includes('*') && host.toLowerCase() === approvedPageUrl.hostname.toLowerCase());
+    if (!exactPageHost) throw new Error('approvedPageUrl host must exactly match pageHosts');
+    const moduleId = requireText(input.moduleId, 'moduleId');
+    if (approvedPageUrl.pathname.split('/').filter(Boolean).at(-1) !== moduleId) throw new Error('approvedPageUrl must end with moduleId');
+    const authorizationWindow = input.authorizationWindow;
+    const startsAt = requireText(authorizationWindow?.startsAt, 'authorizationWindow.startsAt');
+    const endsAt = requireText(authorizationWindow?.endsAt, 'authorizationWindow.endsAt');
+    if (Number.isNaN(Date.parse(startsAt)) || Number.isNaN(Date.parse(endsAt)) || Date.parse(startsAt) >= Date.parse(endsAt)) {
+      throw new Error('authorizationWindow must contain valid increasing timestamps');
+    }
+    const nowValue = now instanceof Date ? now.getTime() : Date.parse(now);
+    if (!Number.isFinite(nowValue) || nowValue < Date.parse(startsAt) || nowValue > Date.parse(endsAt)) {
+      throw new Error('Automation authorizationWindow is not currently active');
+    }
+    authorization = Object.freeze({
+      caseId,
+      approvedPageUrl: approvedPageUrl.toString(),
+      moduleId,
+      testAccount: requireText(input.testAccount, 'testAccount'),
+      startsAt: new Date(startsAt).toISOString(),
+      endsAt: new Date(endsAt).toISOString(),
+      stopContact: requireText(input.stopContact, 'stopContact'),
+    });
+  }
   return {
     caseId: typeof input.caseId === 'string' ? input.caseId : null,
     pageHosts,
@@ -67,15 +106,23 @@ export function normalizeScope(input) {
     types,
     limits,
     stopStatuses: new Set(stopStatuses),
+    automation,
+    fixtureProfileNames: automation.fixtureProfileNames || [],
+    fixtureProfiles: automation.fixtureProfiles || Object.freeze({}),
+    widgetFixtureMap: automation.widgetFixtureMap || Object.freeze({}),
+    authorization,
   };
 }
 
 export function validateBody(kind, body) {
   if (!body.length) return { accepted: false, reason: 'empty-body' };
   if (!body.some((byte) => byte !== 0)) return { accepted: false, reason: 'all-zero-body' };
-  const textHead = body.subarray(0, 512).toString('utf8').trimStart().toLowerCase();
+  const textHead = body.subarray(0, 2048).toString('utf8').trimStart().toLowerCase();
   if ((kind === 'js' || kind === 'css') && (textHead.startsWith('<!doctype html') || textHead.startsWith('<html') || textHead.includes('<head'))) {
     return { accepted: false, reason: `html-body-for-${kind}` };
+  }
+  if (kind === 'html' && !/^(?:<!doctype\s+html\b|<html\b)/i.test(textHead)) {
+    return { accepted: false, reason: 'invalid-html-body' };
   }
   if (kind === 'wasm' && !body.subarray(0, 4).equals(Buffer.from([0, 97, 115, 109]))) {
     return { accepted: false, reason: 'invalid-wasm-magic' };

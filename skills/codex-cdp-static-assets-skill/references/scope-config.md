@@ -1,75 +1,103 @@
 # Scope Configuration
 
-Use a JSON Scope file for every live session. It is both the execution boundary and the audit record.
+The JSON Scope is both the one-time authorization boundary and an audit input. Metadata discovery never promotes a host automatically.
 
-## Written authorization
+## Required authorization
 
-Record the case ID, test account, page host, time window, owner/SOC contact, allowed UI scenarios, permitted asset types, traffic ceiling, and stop conditions.
-
-Component addition may autosave. Written scope must explicitly allow creating or editing the dedicated test module and that autosave. Unless separately approved, forbid publish, action, workflow, export, delete, permission-change, and production-writeback behavior.
-
-## Discovery Scope
-
-Start with only the page host. Discovery records naturally observed HTTP(S) and WebSocket host metadata; it never reads response bodies.
+Record the case ID, exact page host/Module, test account, time and traffic ceilings, stop contact, asset types, autosave permission, capture-page permission, and whether current Module variables may be selected. Exact synthetic fixtures may still be approved as per-Widget overrides. The authorization permits only visible Workshop edits needed for capture.
 
 ```json
 {
   "caseId": "SEC-2026-001",
   "pageHosts": ["workshop.example.com"],
-  "types": ["js", "css", "wasm", "font"],
-  "limits": {
-    "maxAssets": 0,
-    "maxTotalMiB": 0,
-    "maxAssetMiB": 50
+  "approvedPageUrl": "https://workshop.example.com/module/edit/module-rid",
+  "moduleId": "module-rid",
+  "testAccount": "synthetic-test-account",
+  "authorizationWindow": {
+    "startsAt": "2026-07-21T00:00:00.000Z",
+    "endsAt": "2026-07-21T08:00:00.000Z"
   },
-  "stopOnStatuses": [401, 403, 429]
-}
-```
-
-After one representative discovery pass, review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. Candidates are evidence for one batch approval, never automatic trust.
-
-## Capture Scope
-
-Add exact approved static hosts to `assetHosts`. Page hosts may serve same-origin assets. Put separately approved normal page dependencies whose bodies must not be saved in `approvedNetworkHosts`.
-
-```json
-{
-  "caseId": "SEC-2026-001",
-  "pageHosts": ["workshop.example.com"],
+  "stopContact": "workshop-owner",
   "assetHosts": ["cdn.workshop.example.com"],
   "approvedNetworkHosts": ["api.workshop.example.com"],
-  "types": ["js", "css", "wasm", "font"],
+  "types": ["js", "css", "wasm", "image", "html"],
   "limits": {
     "maxAssets": 0,
     "maxTotalMiB": 0,
     "maxAssetMiB": 50
   },
-  "stopOnStatuses": [401, 403, 429]
+  "stopOnStatuses": [401, 403, 429],
+  "automation": {
+    "enabled": true,
+    "mode": "full-catalog",
+    "allowAutosave": true,
+    "allowCreateCapturePages": true,
+    "allowExistingModuleVariables": true,
+    "captureStateScreenshots": false,
+    "maxWidgetsPerPage": 8,
+    "states": [
+      "editor-mounted",
+      "data-bound",
+      "preview-visible"
+    ]
+  },
+  "fixtureProfiles": {
+    "objects": {
+      "kind": "synthetic-object-set",
+      "visibleOption": "CDP Synthetic Objects"
+    }
+  },
+  "widgetFixtureMap": {
+    "tables/object-table/v1": "objects"
+  }
 }
 ```
 
-Do not use broad CDN/vendor wildcards or allow-any. Stop on a new host and approve its exact hostname before a new run.
+Validate before mutation:
 
-Reuse one append-only Ledger for every strict run. Pass the same `--ledger` path to `import-mcp-response.mjs` for every approved response body.
+```bash
+node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
+```
 
-Hard cumulative limits are optional. `0` disables a retained asset-count or total-byte stop, but the ledger still records decoded bodies and rejects a mismatched `caseId`. Keep a nonzero per-resource guard. Retention limits do not replace an owner-defined request, traffic, or time ceiling.
+## Modes
 
-## Cache Decision
+- `full-catalog` requires `allowAutosave: true` and `allowCreateCapturePages: true`. Pages are named `CDP Capture 001`, `CDP Capture 002`, and so on.
+- `single-page` requires `allowAutosave: true` and `allowCreateCapturePages: false`. At capacity, record `blocked-page-capacity` and stop.
+- `captureStateScreenshots: true` authorizes one element-level PNG evidence item per successful state. Omit it or set it to `false` by default.
+- Omitted automation is passive mode. An automation object must use an explicit boolean `enabled`.
 
-- On Chrome 144+, use Chrome DevTools MCP `--autoConnect` with explicit approval at `chrome://inspect/#remote-debugging`. Select only the unique page matching `pageHosts`. The MCP can see all windows in the selected profile, so close unrelated sensitive pages when practical and never persist their metadata.
-- Accept body-unavailable gaps created by discovery or normal browser caching; record the gap and do not refetch.
-- If prerequisites are unavailable, pause. Do not transfer cookies, tokens, passwords, or profile files or request another browser session.
-- Always: never clear cache, disable cache, bypass the Service Worker, or replay a resource URL.
+`maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix. Automated Scope also requires a non-empty Case ID, an exact query-free `approvedPageUrl` whose final path segment equals `moduleId`, plus test account, a currently active increasing authorization window, and stop contact. Expired or not-yet-active Scope is rejected. These fields let the runner stop on same-host Module drift; account/contact values are never copied into provenance.
+
+## Existing Module variables and fixture overrides
+
+`allowExistingModuleVariables: true` authorizes selecting variables already defined in the approved Module. For a deterministic full-catalog run, manually pre-create a small, non-production Object Set variable before authorization and map affected Widgets to its exact visible option. Keep the current selection when the Widget's visible typed selector accepts it; otherwise choose the first enabled compatible option presented by that selector. Never inspect hidden candidates or create, modify, or delete variables or data sources.
+
+`fixtureProfiles` names exact visible test options and `widgetFixtureMap` may reference only those names. A mapped fixture overrides automatic existing-variable selection for that Widget.
+
+For `data-bound`:
+
+- no data-source capability: `not-applicable`, `required: false`;
+- mapping present: select the exact `visibleOption`;
+- no mapping and existing Module variables are authorized: keep or select a visibly compatible existing variable;
+- no compatible variable for an optional source: `not-requested`, `required: false`;
+- no compatible variable for a required source: `blocked-missing-fixture`, partial coverage, then continue the remaining states and Widgets.
+
+After a successful selection, save through approved autosave, return to the Widget, and capture the rendered data state. A missing fixture affects behavior coverage only; it does not reduce implementation-body retention.
+
+Provenance retains only the existing-variable authorization boolean, Profile names, and mapped widget keys—not variable names, visible option text, or rendered data.
+
+## Exact hosts
+
+Start discovery with `pageHosts`. List all current request metadata, then present exact asset/network candidates in the single consolidated authorization. Do not use allow-any or broad wildcard approval. Any later unknown host stops the run and requires a new authorization boundary.
+
+Document HTML additionally requires its response hostname to appear as an exact non-wildcard approved host.
+
+## Limits and Ledger
+
+Reuse one append-only Ledger across all runs. `0` disables retained asset-count or total-byte limits but does not disable owner traffic/time ceilings. Keep a nonzero `maxAssetMiB` guard. A Ledger `caseId` mismatch is fatal.
 
 ## Outputs
 
-- `observed-network-hosts.json`: all discovered network hosts
-- `observed-hosts.json`: discovered static-resource hosts
-- `scope-candidates.json`: exact unapproved asset and network-only candidates
-- `task-ledger.ndjson`: cumulative retained-body usage
-- `manifest.ndjson`: accepted assets and hashes
-- `invalid-assets.ndjson`: rejected bodies and budget events
-- `risk-events.ndjson`: status, target, and scope failures
-- `asset-audit.json`: offline integrity results
-- `merge-summary.json`: deduplicated delivery summary from `merge-captures.mjs`
-- `summary.json`: run counters and detected Workshop Build IDs
+- Per run: `manifest.ndjson`, baseline-derived `widget-inventory.json`, `component-events.ndjson`, optional `evidence/components/<marker-base>/<state>--<attempt-number>.png`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`. Catalog preview/icon resources use the shared `baseline:catalog` marker.
+- Resume state: `catalog-state.json` contains only canonical keys/counters; `network-state.json` contains only request ID/status fingerprints/counters.
+- Delivery: aggregate metadata including `metadata/widget-inventory.json`, `metadata/baseline-assets.json`, one file per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated `assets/`.

@@ -37,6 +37,71 @@ test('normalizes scope without auto-approving observed hosts', () => {
   assert.deepEqual(scope.approvedNetworkHosts, ['workshop.example.com', 'cdn.example.com', 'api.example.com']);
 });
 
+test('accepts html as an explicit scope type', () => {
+  const scope = normalizeScope({
+    caseId: 'SEC-1',
+    pageHosts: ['workshop.example.com'],
+    approvedPageUrl: 'https://workshop.example.com/module/edit/module-1',
+    moduleId: 'module-1',
+    testAccount: 'synthetic-tester',
+    authorizationWindow: { startsAt: '2026-01-01T00:00:00.000Z', endsAt: '2027-01-01T00:00:00.000Z' },
+    stopContact: 'workshop-owner',
+    types: ['html'],
+  });
+  assert.deepEqual([...scope.types], ['html']);
+});
+
+test('normalizes the automation and synthetic fixture policy with the capture scope', () => {
+  const scope = normalizeScope({
+    caseId: 'SEC-1',
+    pageHosts: ['workshop.example.com'],
+    approvedPageUrl: 'https://workshop.example.com/module/edit/module-1',
+    moduleId: 'module-1',
+    testAccount: 'synthetic-tester',
+    authorizationWindow: { startsAt: '2026-01-01T00:00:00.000Z', endsAt: '2027-01-01T00:00:00.000Z' },
+    stopContact: 'workshop-owner',
+    automation: {
+      enabled: true,
+      mode: 'single-page',
+      allowAutosave: true,
+      allowCreateCapturePages: false,
+      maxWidgetsPerPage: 5,
+      states: ['editor-mounted', 'data-bound', 'preview-visible'],
+    },
+    fixtureProfiles: { objects: { kind: 'synthetic-object-set', visibleOption: 'CDP Objects' } },
+    widgetFixtureMap: { 'tables/object-table/v1': 'objects' },
+  });
+  assert.equal(scope.automation.mode, 'single-page');
+  assert.deepEqual(scope.fixtureProfileNames, ['objects']);
+  assert.deepEqual(scope.widgetFixtureMap, { 'tables/object-table/v1': 'objects' });
+  assert.equal(scope.authorization.moduleId, 'module-1');
+});
+
+test('rejects automated scope without an exact authorized Module and run context', () => {
+  const automation = {
+    enabled: true,
+    mode: 'single-page',
+    allowAutosave: true,
+    allowCreateCapturePages: false,
+    maxWidgetsPerPage: 5,
+    states: ['editor-mounted'],
+  };
+  assert.throws(() => normalizeScope({ pageHosts: ['workshop.example.com'], automation }), /caseId/);
+  assert.throws(() => normalizeScope({ caseId: 'SEC-1', pageHosts: ['workshop.example.com'], automation }), /approvedPageUrl/);
+  const context = {
+    pageHosts: ['workshop.example.com'], automation,
+    approvedPageUrl: 'https://workshop.example.com/module/edit/module-1', moduleId: 'module-1', testAccount: 'tester',
+    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' }, stopContact: 'owner',
+  };
+  assert.throws(() => normalizeScope(context, { now: '2026-07-21T01:00:00.000Z' }), /caseId/);
+  assert.throws(() => normalizeScope({ ...context, caseId: 'SEC-1' }, { now: '2026-07-22T01:00:00.000Z' }), /not currently active/);
+  assert.throws(() => normalizeScope({
+    caseId: 'SEC-1', pageHosts: ['workshop.example.com'], automation,
+    approvedPageUrl: 'https://other.example.com/module/edit/module-1', moduleId: 'module-1', testAccount: 'tester',
+    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' }, stopContact: 'owner',
+  }, { now: '2026-07-21T01:00:00.000Z' }), /exactly match pageHosts/);
+});
+
 test('rejects empty, zero, HTML, invalid WASM, and invalid font bodies', () => {
   assert.equal(validateBody('js', Buffer.alloc(0)).reason, 'empty-body');
   assert.equal(validateBody('js', Buffer.alloc(4)).reason, 'all-zero-body');
@@ -44,6 +109,13 @@ test('rejects empty, zero, HTML, invalid WASM, and invalid font bodies', () => {
   assert.equal(validateBody('wasm', Buffer.from('nope')).reason, 'invalid-wasm-magic');
   assert.equal(validateBody('font', Buffer.from('nope')).reason, 'invalid-font-magic');
   assert.equal(validateBody('font', Buffer.from('wOF2')).accepted, true);
+});
+
+test('accepts document-shaped HTML and rejects JSON bodies for html', () => {
+  assert.equal(validateBody('html', Buffer.from('<!doctype html><title>Widget</title>')).accepted, true);
+  assert.equal(validateBody('html', Buffer.from('<html><body>Widget</body></html>')).accepted, true);
+  assert.equal(validateBody('html', Buffer.from(`${' '.repeat(1024)}<!doctype html><title>Widget</title>`)).accepted, true);
+  assert.equal(validateBody('html', Buffer.from('{"data":1}')).reason, 'invalid-html-body');
 });
 
 test('tracks one cumulative ledger budget', () => {

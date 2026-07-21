@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -22,13 +23,20 @@ function normalizeResourceType(value = '') {
   if (normalized === 'stylesheet') return 'Stylesheet';
   if (normalized === 'font') return 'Font';
   if (normalized === 'image') return 'Image';
+  if (normalized === 'document') return 'Document';
+  if (normalized === 'fetch') return 'Fetch';
+  if (normalized === 'xhr') return 'XHR';
   return value;
 }
 
 export function classifyMcpResource({ resourceType = '', mimeType = '', url = '' }) {
   const type = normalizeResourceType(resourceType);
   const mime = mimeType.toLowerCase();
+  const essence = mime.split(';', 1)[0].trim();
   const path = url.toLowerCase().split(/[?#]/, 1)[0];
+  const htmlMime = essence === 'text/html' || essence === 'application/xhtml+xml';
+  if (type === 'Document') return htmlMime ? 'html' : null;
+  if ((type === 'Fetch' || type === 'XHR') && htmlMime) return null;
   if (type === 'Script' || mime.includes('javascript') || mime.includes('ecmascript') || /\.m?js$/.test(path)) return 'js';
   if (type === 'Stylesheet' || mime === 'text/css' || path.endsWith('.css')) return 'css';
   if (mime === 'application/wasm' || path.endsWith('.wasm')) return 'wasm';
@@ -38,7 +46,8 @@ export function classifyMcpResource({ resourceType = '', mimeType = '', url = ''
 }
 
 function extensionFor(kind, resourceUrl, mimeType = '') {
-  const known = new Set(['.js', '.mjs', '.css', '.wasm', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif']);
+  const known = new Set(['.js', '.mjs', '.css', '.wasm', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif', '.html', '.xhtml']);
+  if (kind === 'html') return mimeType.toLowerCase().split(';', 1)[0].trim() === 'application/xhtml+xml' ? '.xhtml' : '.html';
   try {
     const path = new URL(resourceUrl).pathname.toLowerCase();
     const extension = [...known].find((candidate) => path.endsWith(candidate));
@@ -77,7 +86,6 @@ async function appendNdjson(path, value) {
 
 async function initializeOutput(output, scope, ledgerPath) {
   await mkdir(join(output, 'assets'), { recursive: true });
-  await mkdir(join(output, '.mcp-staging'), { recursive: true });
   const provenancePath = join(output, 'provenance.json');
   await writeFile(provenancePath, JSON.stringify({
     startedAt: new Date().toISOString(),
@@ -90,6 +98,21 @@ async function initializeOutput(output, scope, ledgerPath) {
     types: [...scope.types],
     stopStatuses: [...scope.stopStatuses],
     limits: scope.limits,
+    automation: scope.automation.enabled ? {
+      enabled: true,
+      mode: scope.automation.mode,
+      allowAutosave: scope.automation.allowAutosave,
+      allowCreateCapturePages: scope.automation.allowCreateCapturePages,
+      allowExistingModuleVariables: scope.automation.allowExistingModuleVariables,
+      captureStateScreenshots: scope.automation.captureStateScreenshots,
+      maxWidgetsPerPage: scope.automation.maxWidgetsPerPage,
+      states: scope.automation.states,
+      fixtureProfileNames: scope.fixtureProfileNames,
+      mappedWidgetKeys: Object.keys(scope.widgetFixtureMap).sort(),
+      approvedPageUrl: scope.authorization.approvedPageUrl,
+      moduleId: scope.authorization.moduleId,
+      authorizationWindow: { startsAt: scope.authorization.startsAt, endsAt: scope.authorization.endsAt },
+    } : { enabled: false },
     ledger: ledgerPath || null,
     policy: 'natural-load-only',
     note: 'Bodies were read from completed requests already observed by the selected Chrome page. No resource URL was replayed.',
@@ -124,6 +147,7 @@ export async function importMcpResponse(input) {
   const output = resolve(input.output);
   const ledgerPath = input.ledgerPath ? resolve(input.ledgerPath) : null;
   const bodyPath = input.bodyPath ? resolve(input.bodyPath) : null;
+  const stagingRoot = resolve(input.stagingRoot || tmpdir());
   const scope = normalizeScope(JSON.parse(await readFile(scopePath, 'utf8')));
   await initializeOutput(output, scope, ledgerPath);
 
@@ -135,9 +159,15 @@ export async function importMcpResponse(input) {
   const manifestPath = join(output, 'manifest.ndjson');
   const cleanupStagedBody = async () => {
     if (!input.deleteBody || !bodyPath) return;
-    const stagedRelativePath = relative(join(output, '.mcp-staging'), bodyPath);
-    if (!stagedRelativePath || stagedRelativePath.startsWith('..') || isAbsolute(stagedRelativePath)) return;
-    await unlink(bodyPath).catch(() => {});
+    const [canonicalRoot, canonicalBody] = await Promise.all([
+      realpath(stagingRoot),
+      realpath(bodyPath),
+    ]);
+    const stagedRelativePath = relative(canonicalRoot, canonicalBody);
+    if (!stagedRelativePath || stagedRelativePath.startsWith('..') || isAbsolute(stagedRelativePath)) {
+      throw new Error(`Refusing to delete body outside staging root: ${bodyPath}`);
+    }
+    await unlink(canonicalBody);
   };
 
   if (!urlScope.network || !urlScope.allowed) {
@@ -167,6 +197,31 @@ export async function importMcpResponse(input) {
   if (!kind || !scope.types.has(kind)) {
     await cleanupStagedBody();
     return { event: 'ignored', kind };
+  }
+  if (kind === 'html') {
+    const exactlyApproved = scope.approvedNetworkHosts.some((pattern) => (
+      !pattern.includes('*') && pattern.toLowerCase() === urlScope.host.toLowerCase()
+    ));
+    if (!exactlyApproved) {
+      await appendNdjson(riskPath, {
+        at: new Date().toISOString(),
+        kind: 'document-host-not-exactly-approved',
+        host: urlScope.host,
+        url: redactUrl(input.url),
+        backend: 'chrome-devtools-mcp-autoconnect',
+      });
+      await cleanupStagedBody();
+      throw new Error(`Document HTML host is not exactly approved: ${urlScope.host}`);
+    }
+    const safeDocumentRequest = input.requestMethod === 'GET'
+      && input.requestHasBody === false
+      && ['top-level', 'widget-iframe'].includes(input.documentContext)
+      && status >= 200
+      && status <= 399;
+    if (!safeDocumentRequest) {
+      await cleanupStagedBody();
+      return { event: 'ignored', kind, reason: 'unsafe-document-html' };
+    }
   }
   if (!hostIsAllowed(urlScope.host, scope.assetHosts)) {
     await appendNdjson(riskPath, {
@@ -306,7 +361,9 @@ function usage() {
   return `Usage:
   node import-mcp-response.mjs --scope FILE --output DIR --url URL --status CODE \\
     --resource-type TYPE [--mime-type MIME] [--body FILE] [--request-id ID] \\
-    [--marker LABEL] [--ledger FILE] [--delete-body]
+    [--request-method METHOD] [--request-has-body true|false] \\
+    [--document-context top-level|widget-iframe] [--marker LABEL] [--ledger FILE] \\
+    [--staging-root DIR] [--delete-body]
 
 Omit --body to record body-unavailable. This command never fetches a URL.
 `;
@@ -330,8 +387,16 @@ function parseArgs(argv) {
     else if (arg === '--status') options.status = next();
     else if (arg === '--resource-type') options.resourceType = next();
     else if (arg === '--mime-type') options.mimeType = next();
+    else if (arg === '--request-method') options.requestMethod = next();
+    else if (arg === '--request-has-body') {
+      const value = next();
+      if (!['true', 'false'].includes(value)) throw new Error('--request-has-body must be true or false');
+      options.requestHasBody = value === 'true';
+    }
+    else if (arg === '--document-context') options.documentContext = next();
     else if (arg === '--marker') options.marker = next();
     else if (arg === '--request-id') options.requestId = next();
+    else if (arg === '--staging-root') options.stagingRoot = next();
     else if (arg === '--delete-body') options.deleteBody = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
