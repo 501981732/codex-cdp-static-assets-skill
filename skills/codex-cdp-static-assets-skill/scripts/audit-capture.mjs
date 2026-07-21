@@ -45,7 +45,9 @@ async function auditComponentAssets(output, manifestEntries) {
     const mergeSummary = await exists(mergeSummaryPath) ? JSON.parse(await readFile(mergeSummaryPath, 'utf8')) : null;
     return {
       file: null,
-      invalid: Number(mergeSummary?.componentCount) > 0 ? [{ file: 'metadata/component-assets.json', reason: 'component-assets-missing' }] : [],
+      invalid: mergeSummary && Object.hasOwn(mergeSummary, 'componentCount')
+        ? [{ file: 'metadata/component-assets.json', reason: 'component-assets-missing' }]
+        : [],
       summary: { componentCount: 0, completeComponents: 0, partialComponents: 0 },
     };
   }

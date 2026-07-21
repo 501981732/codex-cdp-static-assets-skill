@@ -108,7 +108,7 @@ test('provenance records only non-sensitive automation policy and fixture names'
   scope.approvedPageUrl = 'https://workshop.example.com/module/edit/module-1';
   scope.moduleId = 'module-1';
   scope.testAccount = 'synthetic-tester';
-  scope.authorizationWindow = { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' };
+  scope.authorizationWindow = { startsAt: '2026-01-01T00:00:00.000Z', endsAt: '2027-01-01T00:00:00.000Z' };
   scope.stopContact = 'workshop-owner';
   scope.fixtureProfiles = {
     objects: { kind: 'synthetic-object-set', visibleOption: 'CDP Objects', secret: 'must-not-persist' },

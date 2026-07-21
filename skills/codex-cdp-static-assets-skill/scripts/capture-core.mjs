@@ -40,7 +40,7 @@ export function scopeHost(value, patterns) {
   }
 }
 
-export function normalizeScope(input) {
+export function normalizeScope(input, { now = new Date() } = {}) {
   const requiredArray = (value, field) => {
     if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item.trim())) {
       throw new Error(`Scope field ${field} must be an array of host patterns`);
@@ -68,6 +68,7 @@ export function normalizeScope(input) {
       if (typeof value !== 'string' || !value.trim()) throw new Error(`Automation Scope requires ${field}`);
       return value.trim();
     };
+    const caseId = requireText(input.caseId, 'caseId');
     const approvedPageUrl = new URL(requireText(input.approvedPageUrl, 'approvedPageUrl'));
     if (!['http:', 'https:'].includes(approvedPageUrl.protocol) || approvedPageUrl.username || approvedPageUrl.password
       || approvedPageUrl.search || approvedPageUrl.hash) {
@@ -83,7 +84,12 @@ export function normalizeScope(input) {
     if (Number.isNaN(Date.parse(startsAt)) || Number.isNaN(Date.parse(endsAt)) || Date.parse(startsAt) >= Date.parse(endsAt)) {
       throw new Error('authorizationWindow must contain valid increasing timestamps');
     }
+    const nowValue = now instanceof Date ? now.getTime() : Date.parse(now);
+    if (!Number.isFinite(nowValue) || nowValue < Date.parse(startsAt) || nowValue > Date.parse(endsAt)) {
+      throw new Error('Automation authorizationWindow is not currently active');
+    }
     authorization = Object.freeze({
+      caseId,
       approvedPageUrl: approvedPageUrl.toString(),
       moduleId,
       testAccount: requireText(input.testAccount, 'testAccount'),

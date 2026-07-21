@@ -39,11 +39,12 @@ test('normalizes scope without auto-approving observed hosts', () => {
 
 test('accepts html as an explicit scope type', () => {
   const scope = normalizeScope({
+    caseId: 'SEC-1',
     pageHosts: ['workshop.example.com'],
     approvedPageUrl: 'https://workshop.example.com/module/edit/module-1',
     moduleId: 'module-1',
     testAccount: 'synthetic-tester',
-    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' },
+    authorizationWindow: { startsAt: '2026-01-01T00:00:00.000Z', endsAt: '2027-01-01T00:00:00.000Z' },
     stopContact: 'workshop-owner',
     types: ['html'],
   });
@@ -52,11 +53,12 @@ test('accepts html as an explicit scope type', () => {
 
 test('normalizes the automation and synthetic fixture policy with the capture scope', () => {
   const scope = normalizeScope({
+    caseId: 'SEC-1',
     pageHosts: ['workshop.example.com'],
     approvedPageUrl: 'https://workshop.example.com/module/edit/module-1',
     moduleId: 'module-1',
     testAccount: 'synthetic-tester',
-    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' },
+    authorizationWindow: { startsAt: '2026-01-01T00:00:00.000Z', endsAt: '2027-01-01T00:00:00.000Z' },
     stopContact: 'workshop-owner',
     automation: {
       enabled: true,
@@ -84,12 +86,20 @@ test('rejects automated scope without an exact authorized Module and run context
     maxWidgetsPerPage: 5,
     states: ['editor-mounted'],
   };
-  assert.throws(() => normalizeScope({ pageHosts: ['workshop.example.com'], automation }), /approvedPageUrl/);
-  assert.throws(() => normalizeScope({
+  assert.throws(() => normalizeScope({ pageHosts: ['workshop.example.com'], automation }), /caseId/);
+  assert.throws(() => normalizeScope({ caseId: 'SEC-1', pageHosts: ['workshop.example.com'], automation }), /approvedPageUrl/);
+  const context = {
     pageHosts: ['workshop.example.com'], automation,
+    approvedPageUrl: 'https://workshop.example.com/module/edit/module-1', moduleId: 'module-1', testAccount: 'tester',
+    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' }, stopContact: 'owner',
+  };
+  assert.throws(() => normalizeScope(context, { now: '2026-07-21T01:00:00.000Z' }), /caseId/);
+  assert.throws(() => normalizeScope({ ...context, caseId: 'SEC-1' }, { now: '2026-07-22T01:00:00.000Z' }), /not currently active/);
+  assert.throws(() => normalizeScope({
+    caseId: 'SEC-1', pageHosts: ['workshop.example.com'], automation,
     approvedPageUrl: 'https://other.example.com/module/edit/module-1', moduleId: 'module-1', testAccount: 'tester',
     authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' }, stopContact: 'owner',
-  }), /exactly match pageHosts/);
+  }, { now: '2026-07-21T01:00:00.000Z' }), /exactly match pageHosts/);
 });
 
 test('rejects empty, zero, HTML, invalid WASM, and invalid font bodies', () => {

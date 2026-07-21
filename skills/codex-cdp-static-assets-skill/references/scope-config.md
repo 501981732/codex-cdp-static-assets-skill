@@ -65,7 +65,7 @@ node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
 - `single-page` requires `allowAutosave: true` and `allowCreateCapturePages: false`. At capacity, record `blocked-page-capacity` and stop.
 - Omitted automation is passive mode. An automation object must use an explicit boolean `enabled`.
 
-`maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix. Automated Scope also requires an exact query-free `approvedPageUrl` whose final path segment equals `moduleId`, plus test account, increasing authorization window, and stop contact. These fields let the runner stop on same-host Module drift; account/contact values are never copied into provenance.
+`maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix. Automated Scope also requires a non-empty Case ID, an exact query-free `approvedPageUrl` whose final path segment equals `moduleId`, plus test account, a currently active increasing authorization window, and stop contact. Expired or not-yet-active Scope is rejected. These fields let the runner stop on same-host Module drift; account/contact values are never copied into provenance.
 
 ## Synthetic fixtures
 

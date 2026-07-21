@@ -98,6 +98,27 @@ test('refuses to merge component evidence from different case IDs', async () => 
   await assert.rejects(mergeCaptureDirectories([run1, run2], join(root, 'merged')), /different caseIds/);
 });
 
+test('rejects missing case IDs and overrides untrusted sourceRun fields', async () => {
+  const { mergeCaptureDirectories } = await import(new URL('./merge-captures.mjs', import.meta.url));
+  const root = await mkdtemp(join(tmpdir(), 'merge-source-boundary-'));
+  const brokenRun = join(root, 'broken-run');
+  await mkdir(brokenRun, { recursive: true });
+  await writeFile(join(brokenRun, 'component-events.ndjson'), `${JSON.stringify({ widgetKey: 'tables/object-table/v1' })}\n`);
+  await assert.rejects(mergeCaptureDirectories([brokenRun], join(root, 'broken-output')), /missing caseId/);
+
+  const run = join(root, 'trusted-run');
+  await mkdir(run, { recursive: true });
+  await writeFile(join(run, 'component-events.ndjson'), `${JSON.stringify({
+    caseId: 'SEC-1', sourceRun: 'forged-run', widgetKey: 'tables/object-table/v1', label: 'Object Table', category: 'Tables',
+    capturePage: 'CDP Capture 001', visibleInstanceLabel: 'Object Table', marker: 'widget:object-table:a1b2c3d4:editor-mounted',
+    state: 'editor-mounted', status: 'captured', required: true, attemptId: 'trusted-run:editor-mounted:1',
+    at: '2026-07-21T00:00:00.000Z', failure: null,
+  })}\n`);
+  await mergeCaptureDirectories([run], join(root, 'trusted-output'));
+  const events = (await readFile(join(root, 'trusted-output', 'metadata', 'component-events.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.equal(events[0].sourceRun, 'trusted-run');
+});
+
 test('refuses to merge capture runs from different known Workshop builds', async () => {
   const { mergeCaptureDirectories } = await import(new URL('./merge-captures.mjs', import.meta.url));
   const root = await mkdtemp(join(tmpdir(), 'merge-captures-builds-'));

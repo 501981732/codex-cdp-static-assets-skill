@@ -119,6 +119,7 @@ test('plans baseline, capacity, and state-level resume deterministically', () =>
     action: 'blocked',
     reason: 'blocked-existing-instance-ambiguous',
   });
+  assert.throws(() => planResume({ completedStates: [], added: true, visibleMatches: Number.NaN }), /visibleMatches/);
 });
 
 test('CLI state files retain only canonical keys or request fingerprints', async () => {
@@ -150,6 +151,19 @@ test('catalog-update CLI stops on indistinguishable same-snapshot widgets', asyn
     ]),
     '--at-bottom', 'false',
   ]), /catalog-identity-ambiguity/);
+  await assert.rejects(runAutomationPolicyCli([
+    'catalog-update', '--state', join(root, 'mixed-state.json'),
+    '--entries-json', JSON.stringify([
+      'data/chart/v1',
+      { label: 'Chart', category: 'Data', versionOrType: 'v1' },
+    ]), '--at-bottom', 'false',
+  ]), /catalog-identity-ambiguity/);
+});
+
+test('resume CLI fails closed without a visible match count', async () => {
+  await assert.rejects(runAutomationPolicyCli([
+    'resume', '--component-json', JSON.stringify({ completedStates: [], added: true, fixtureAvailable: true }),
+  ]), /visibleMatches/);
 });
 
 test('validate-scope CLI enforces the exact Module authorization context', async () => {
@@ -161,7 +175,7 @@ test('validate-scope CLI enforces the exact Module authorization context', async
     approvedPageUrl: 'https://workshop.example.com/module/edit/module-1',
     moduleId: 'module-1',
     testAccount: 'synthetic-tester',
-    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' },
+    authorizationWindow: { startsAt: '2026-01-01T00:00:00.000Z', endsAt: '2027-01-01T00:00:00.000Z' },
     stopContact: 'workshop-owner',
     automation: validInput({ automation: { mode: 'single-page', allowCreateCapturePages: false } }).automation,
   };

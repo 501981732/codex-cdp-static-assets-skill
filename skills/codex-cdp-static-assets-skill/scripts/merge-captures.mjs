@@ -83,6 +83,9 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   const inputComponentEvents = await Promise.all(inputs.map((input) => readNdjson(join(input, 'component-events.ndjson'))));
   const caseIds = new Set();
   for (const [index, events] of inputComponentEvents.entries()) {
+    if (events.some((event) => typeof event.caseId !== 'string' || !event.caseId.trim())) {
+      throw new Error(`Capture run component event is missing caseId: ${basename(inputs[index])}`);
+    }
     const runCaseIds = new Set([inputProvenance[index]?.caseId, ...events.map((event) => event.caseId)].filter(Boolean));
     if (runCaseIds.size > 1) throw new Error(`Capture run caseId mismatch: ${basename(inputs[index])}`);
     for (const caseId of runCaseIds) caseIds.add(caseId);
@@ -108,13 +111,13 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   for (const [index, input] of inputs.entries()) {
     const sourceRun = basename(input);
     const manifest = await readNdjson(join(input, 'manifest.ndjson'));
-    sourceManifest.push(...manifest.map((entry) => ({ sourceRun, ...entry })));
-    componentEvents.push(...inputComponentEvents[index].map((entry) => ({ sourceRun, ...entry })));
+    sourceManifest.push(...manifest.map((entry) => ({ ...entry, sourceRun })));
+    componentEvents.push(...inputComponentEvents[index].map((entry) => ({ ...entry, sourceRun })));
     const summary = inputSummaries[index];
     if (summary) summaries.push({ sourceRun, ...summary });
-    risks.push(...(await readNdjson(join(input, 'risk-events.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
-    invalid.push(...(await readNdjson(join(input, 'invalid-assets.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
-    markers.push(...(await readNdjson(join(input, 'markers.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
+    risks.push(...(await readNdjson(join(input, 'risk-events.ndjson'))).map((entry) => ({ ...entry, sourceRun })));
+    invalid.push(...(await readNdjson(join(input, 'invalid-assets.ndjson'))).map((entry) => ({ ...entry, sourceRun })));
+    markers.push(...(await readNdjson(join(input, 'markers.ndjson'))).map((entry) => ({ ...entry, sourceRun })));
 
     for (const entry of manifest.filter((item) => item.event === 'saved' && item.sha256 && item.file)) {
       savedEvents += 1;
@@ -182,9 +185,11 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
     riskEvents: risks.length,
     invalidEvents: invalid.length,
     workshopBuildIds: knownWorkshopBuildIds,
-    componentCount: componentSummary.total,
-    completeComponents: componentSummary.complete,
-    partialComponents: componentSummary.partial,
+    ...(componentCoverage ? {
+      componentCount: componentSummary.total,
+      completeComponents: componentSummary.complete,
+      partialComponents: componentSummary.partial,
+    } : {}),
   };
 
   await writeFile(join(metadata, 'manifest.ndjson'), ndjson(mergedManifest));

@@ -100,3 +100,15 @@ test('audits component-assets schema, asset references, attempts, and status con
     'component-required-states-inconsistent',
   ]);
 });
+
+test('requires a declared zero-component baseline map', async () => {
+  const output = await mkdtemp(join(tmpdir(), 'cdp-audit-empty-components-'));
+  await mkdir(join(output, 'metadata'), { recursive: true });
+  await writeFile(join(output, 'metadata', 'merge-summary.json'), JSON.stringify({
+    componentCount: 0,
+    completeComponents: 0,
+    partialComponents: 0,
+  }));
+  const report = await auditCapture(output);
+  assert.deepEqual(report.invalid, [{ file: 'metadata/component-assets.json', reason: 'component-assets-missing' }]);
+});

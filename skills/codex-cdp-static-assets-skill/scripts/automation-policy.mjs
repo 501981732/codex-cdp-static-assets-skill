@@ -138,12 +138,16 @@ export function createCatalogCompletionTracker(initial = {}) {
   let stableCount = Number.isInteger(initial.stableCount) ? initial.stableCount : 0;
   return {
     update(entries, nextAtBottom) {
-      if (entries.every((entry) => typeof entry !== 'string')) {
-        buildCatalogQueue([{ snapshotId: 'current-observation', entries }]);
+      if (!Array.isArray(entries)) throw new Error('Catalog observation entries must be an array');
+      const observedKeys = entries.map((entry) => {
+        if (typeof entry === 'string' && entry.trim()) return entry.trim();
+        return canonicalWidgetKey(entry);
+      });
+      if (new Set(observedKeys).size !== observedKeys.length) {
+        throw new Error('catalog-identity-ambiguity: current-observation');
       }
       let added = 0;
-      for (const entry of entries) {
-        const key = typeof entry === 'string' ? entry : canonicalWidgetKey(entry);
+      for (const key of observedKeys) {
         if (!keys.has(key)) {
           keys.add(key);
           added += 1;
@@ -187,6 +191,7 @@ export function createNetworkStabilityTracker(initial = {}) {
 }
 
 export function planResume({ completedStates = [], added = false, fixtureAvailable = false, visibleMatches = 0 }) {
+  if (!Number.isInteger(visibleMatches) || visibleMatches < 0) throw new Error('visibleMatches must be a non-negative integer');
   if (visibleMatches > 1) return { action: 'blocked', reason: 'blocked-existing-instance-ambiguous' };
   const missingStates = COMPONENT_STATES.filter((state) => !completedStates.includes(state));
   if (missingStates.length === 0) return { action: 'complete', missingStates: [] };
