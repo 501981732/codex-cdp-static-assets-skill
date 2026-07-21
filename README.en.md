@@ -60,7 +60,7 @@ After approval it automatically:
 4. Covers `editor-mounted`, `viewport-visible`, `config-opened`, `data-bound`, and `preview-visible`.
 5. At every state, checks all hosts/statuses, waits for three identical request ID/status observations, reads completed response bodies by request ID, and imports immediately.
 6. Records resumable attempts and only fills missing states after interruption.
-7. Audits each run, merges by SHA-256/URL, and creates the aggregate map, a separate baseline, and per-Widget reverse-engineering views.
+7. Exports the Widget registry from retained baseline JS, audits each run, merges by SHA-256/URL, and creates a separate baseline plus per-Widget reverse-engineering views.
 
 The viewport state is mandatory because canvas virtualization or IntersectionObserver rendering can delay natural loads until a Widget is visible. After data configuration, the workflow scrolls back to the Widget and waits for rendering again.
 
@@ -89,6 +89,6 @@ Publishing, actions/workflows, export, permission changes, production writes, hi
 
 ## Output
 
-Runs contain content-addressed assets, redacted manifests, component attempts, optional authorized element screenshots, risks/invalid bodies, and summaries. The merged delivery keeps globally deduplicated `assets/`, the aggregate `metadata/component-assets.json`, shared evidence in `metadata/baseline-assets.json`, one reverse-engineering view per Widget in `metadata/components/`, and optional screenshots under `evidence/`.
+Runs contain content-addressed assets, a baseline-derived Widget inventory, redacted manifests, component attempts, optional authorized element screenshots, risks/invalid bodies, and summaries. The merged delivery keeps globally deduplicated `assets/`, `metadata/widget-inventory.json`, the aggregate `metadata/component-assets.json`, shared evidence in `metadata/baseline-assets.json`, one reverse-engineering view per interacted Widget in `metadata/components/`, and optional screenshots under `evidence/`.
 
 `firstObservedAssets` excludes baseline and assigns each `(sha256, URL)` to only the earliest non-baseline Widget marker. It is timing evidence, not exclusive ownership.

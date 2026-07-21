@@ -94,6 +94,6 @@ Reuse one append-only Ledger across all runs. `0` disables retained asset-count 
 
 ## Outputs
 
-- Per run: `manifest.ndjson`, `component-events.ndjson`, optional `evidence/components/<marker-base>/<state>--<attempt-number>.png`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`.
+- Per run: `manifest.ndjson`, baseline-derived `widget-inventory.json`, `component-events.ndjson`, optional `evidence/components/<marker-base>/<state>--<attempt-number>.png`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`.
 - Resume state: `catalog-state.json` contains only canonical keys/counters; `network-state.json` contains only request ID/status fingerprints/counters.
-- Delivery: aggregate metadata, `metadata/baseline-assets.json`, one file per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated `assets/`.
+- Delivery: aggregate metadata including `metadata/widget-inventory.json`, `metadata/baseline-assets.json`, one file per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated `assets/`.

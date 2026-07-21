@@ -129,7 +129,48 @@ function enrichedAsset(asset, mergedByIdentity) {
   return { ...asset, file: merged.file };
 }
 
-async function writeReverseEngineeringViews({ componentCoverage, mergedManifest, inputs, output, metadata }) {
+function mergeWidgetInventories(inventories, inputs, caseId, generatedAt) {
+  const available = inventories.map((inventory, index) => ({ inventory, sourceRun: basename(inputs[index]) })).filter((item) => item.inventory);
+  if (!available.length) return null;
+  const entries = new Map();
+  const sources = [];
+  for (const { inventory, sourceRun } of available) {
+    if (inventory.schemaVersion !== 1 || inventory.classification !== 'baseline-widget-registry'
+      || !Array.isArray(inventory.entries) || !Array.isArray(inventory.sources)) {
+      throw new Error(`Invalid Widget inventory: ${sourceRun}`);
+    }
+    if (inventory.caseId && inventory.caseId !== caseId) throw new Error(`Widget inventory caseId mismatch: ${sourceRun}`);
+    sources.push(...inventory.sources.map((source) => ({ ...source, sourceRun })));
+    for (const entry of inventory.entries) {
+      const existing = entries.get(entry.typeId);
+      if (existing) {
+        const comparable = (value) => JSON.stringify({
+          rendererName: value.rendererName,
+          chunkIds: value.chunkIds,
+          moduleIds: value.moduleIds,
+        });
+        if (comparable(existing) !== comparable(entry)) throw new Error(`Conflicting Widget inventory entry: ${entry.typeId}`);
+        existing.sourceRuns = [...new Set([...existing.sourceRuns, sourceRun])].sort();
+        continue;
+      }
+      entries.set(entry.typeId, { ...entry, sourceRuns: [sourceRun] });
+    }
+  }
+  const mergedEntries = [...entries.values()].sort((left, right) => left.typeId.localeCompare(right.typeId));
+  const mergedSources = sources.sort((left, right) => left.sourceRun.localeCompare(right.sourceRun) || left.file.localeCompare(right.file));
+  return {
+    schemaVersion: 1,
+    caseId,
+    generatedAt,
+    classification: 'baseline-widget-registry',
+    claim: 'registry-entry-not-interaction-evidence',
+    summary: { registryEntries: mergedEntries.length, sourceAssets: mergedSources.length },
+    sources: mergedSources,
+    entries: mergedEntries,
+  };
+}
+
+async function writeReverseEngineeringViews({ componentCoverage, mergedManifest, widgetInventory, inputs, output, metadata }) {
   const mergedByIdentity = new Map(mergedManifest.map((entry) => [`${entry.sha256}\n${entry.url}`, entry]));
   const inputByRun = new Map(inputs.map((input) => [basename(input), input]));
   const baseline = {
@@ -137,6 +178,7 @@ async function writeReverseEngineeringViews({ componentCoverage, mergedManifest,
     caseId: componentCoverage.caseId,
     generatedAt: componentCoverage.generatedAt,
     attribution: 'baseline-shared-no-component-ownership',
+    ...(widgetInventory ? { widgetInventoryFile: 'widget-inventory.json' } : {}),
     baseline: {
       ...componentCoverage.baseline,
       assets: componentCoverage.baseline.assets.map((asset) => enrichedAsset(asset, mergedByIdentity)),
@@ -155,6 +197,7 @@ async function writeReverseEngineeringViews({ componentCoverage, mergedManifest,
       generatedAt: componentCoverage.generatedAt,
       attribution: 'first-observed-not-exclusive-ownership',
       baselineAssetsFile: '../baseline-assets.json',
+      ...(widgetInventory ? { widgetInventoryFile: '../widget-inventory.json' } : {}),
       component: {
         ...componentDetails,
         newlyObservedAssets: firstObservedAssets.map((asset) => enrichedAsset(asset, mergedByIdentity)),
@@ -173,12 +216,13 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   const inputSummaries = await Promise.all(inputs.map((input) => readJson(join(input, 'summary.json'))));
   const inputProvenance = await Promise.all(inputs.map((input) => readJson(join(input, 'provenance.json'))));
   const inputComponentEvents = await Promise.all(inputs.map((input) => readNdjson(join(input, 'component-events.ndjson'))));
+  const inputWidgetInventories = await Promise.all(inputs.map((input) => readJson(join(input, 'widget-inventory.json'))));
   const caseIds = new Set();
   for (const [index, events] of inputComponentEvents.entries()) {
     if (events.some((event) => typeof event.caseId !== 'string' || !event.caseId.trim())) {
       throw new Error(`Capture run component event is missing caseId: ${basename(inputs[index])}`);
     }
-    const runCaseIds = new Set([inputProvenance[index]?.caseId, ...events.map((event) => event.caseId)].filter(Boolean));
+    const runCaseIds = new Set([inputProvenance[index]?.caseId, inputWidgetInventories[index]?.caseId, ...events.map((event) => event.caseId)].filter(Boolean));
     if (runCaseIds.size > 1) throw new Error(`Capture run caseId mismatch: ${basename(inputs[index])}`);
     for (const caseId of runCaseIds) caseIds.add(caseId);
   }
@@ -261,6 +305,7 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
 
   const createdAt = new Date().toISOString();
   const componentCoverage = caseId ? buildComponentCoverage({ caseId, events: componentEvents, manifest: sourceManifest, generatedAt: createdAt }) : null;
+  const widgetInventory = caseId ? mergeWidgetInventories(inputWidgetInventories, inputs, caseId, createdAt) : null;
   const componentSummary = componentCoverage?.summary || { total: 0, complete: 0, partial: 0 };
   const summary = {
     createdAt,
@@ -282,6 +327,7 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
       completeComponents: componentSummary.complete,
       partialComponents: componentSummary.partial,
     } : {}),
+    ...(widgetInventory ? { widgetInventoryEntries: widgetInventory.summary.registryEntries } : {}),
   };
 
   await writeFile(join(metadata, 'manifest.ndjson'), ndjson(mergedManifest));
@@ -291,9 +337,10 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   await writeFile(join(metadata, 'source-manifest.ndjson'), ndjson(sourceManifest));
   await writeFile(join(metadata, 'component-events.ndjson'), ndjson(componentEvents));
   await writeFile(join(metadata, 'merge-summary.json'), JSON.stringify(summary, null, 2));
+  if (widgetInventory) await writeFile(join(metadata, 'widget-inventory.json'), JSON.stringify(widgetInventory, null, 2));
   if (componentCoverage) {
     await writeFile(join(metadata, 'component-assets.json'), JSON.stringify(componentCoverage, null, 2));
-    await writeReverseEngineeringViews({ componentCoverage, mergedManifest, inputs, output, metadata });
+    await writeReverseEngineeringViews({ componentCoverage, mergedManifest, widgetInventory, inputs, output, metadata });
   }
   return summary;
 }

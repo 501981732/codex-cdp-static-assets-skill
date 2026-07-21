@@ -69,6 +69,18 @@ test('merges source-run component events into component-assets.json', async () =
     state: 'editor-mounted', status: 'captured', required: true,
     attemptId: 'capture-run-1:editor-mounted:1', at: '2026-07-21T00:00:01.000Z', failure: null,
   })}\n`);
+  await writeFile(join(run, 'widget-inventory.json'), JSON.stringify({
+    schemaVersion: 1,
+    caseId: 'SEC-1',
+    generatedAt: '2026-07-21T00:00:00.000Z',
+    classification: 'baseline-widget-registry',
+    summary: { registryEntries: 1, sourceAssets: 1 },
+    sources: [{ file: 'assets/js/widget.js', sha256: 'widget', url: 'https://cdn.example/widget.js', marker: 'baseline' }],
+    entries: [{
+      typeId: 'hubble.object-set-section.v1.oa-object-table', rendererName: 'ObjectTableSection',
+      chunkIds: ['123'], moduleIds: ['456'], sourceSha256: 'widget',
+    }],
+  }));
 
   const summary = await mergeCaptureDirectories([run], output);
   const coverage = JSON.parse(await readFile(join(output, 'metadata', 'component-assets.json'), 'utf8'));
@@ -76,6 +88,7 @@ test('merges source-run component events into component-assets.json', async () =
   const componentFiles = (await import('node:fs/promises')).readdir(join(output, 'metadata', 'components'));
   const componentFile = (await componentFiles)[0];
   const componentView = JSON.parse(await readFile(join(output, 'metadata', 'components', componentFile), 'utf8'));
+  const widgetInventory = JSON.parse(await readFile(join(output, 'metadata', 'widget-inventory.json'), 'utf8'));
   const mergedEvents = (await readFile(join(output, 'metadata', 'component-events.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(coverage.components[0].attempts[0].sourceRun, 'capture-run-1');
   assert.equal(mergedEvents[0].sourceRun, 'capture-run-1');
@@ -84,6 +97,8 @@ test('merges source-run component events into component-assets.json', async () =
   assert.equal(componentFile.startsWith('object-table--'), true);
   assert.equal(componentView.attribution, 'first-observed-not-exclusive-ownership');
   assert.equal(componentView.baselineAssetsFile, '../baseline-assets.json');
+  assert.equal(componentView.widgetInventoryFile, '../widget-inventory.json');
+  assert.equal(widgetInventory.entries[0].typeId, 'hubble.object-set-section.v1.oa-object-table');
   assert.equal(componentView.component.firstObservedAssets, undefined);
   assert.deepEqual(componentView.component.newlyObservedAssets, [{
     kind: 'js', sha256: 'widget', url: 'https://cdn.example/widget.js', size: 6,

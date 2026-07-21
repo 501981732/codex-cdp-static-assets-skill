@@ -62,7 +62,7 @@ Case ID：SEC-2026-001
 4. 对每个 Widget 覆盖 `editor-mounted`、`viewport-visible`、`config-opened`、`data-bound`、`preview-visible`。
 5. 每个状态都先检查全部主机/状态码，再等待三次相同的请求 ID/状态观察，随后按 request ID 读取已完成响应并立即入库。
 6. 每次状态写入可恢复事件；中断后定位唯一现有实例，只补缺失状态，不重复添加。
-7. 逐 run 审计，最终按 SHA-256/URL 合并，同时生成全量组件索引、独立基线和每组件逆向视图。
+7. 从已保存的 baseline JS 导出 Widget 注册清单，再逐 run 审计并按 SHA-256/URL 合并，生成独立基线和每组件逆向视图。
 
 可视区步骤是必需的：Workshop 画布虚拟化或 `IntersectionObserver` 可能直到组件进入视口才渲染/加载。配置数据后还会再次滚回组件并等待渲染。
 
@@ -98,6 +98,7 @@ XHR、fetch、GraphQL/API HTML 一律排除；JS/CSS 返回 HTML 仍记为无效
 - `metadata/source-manifest.ndjson`：带 `sourceRun` 的原始观察事件；
 - `metadata/component-events.ndjson`：全部状态尝试；
 - `metadata/component-assets.json`：Case、baseline、每个 Widget 的状态覆盖、首次观察资源、正文缺失和历史失败；
+- `metadata/widget-inventory.json`：baseline Bundle 已声明的 Type ID、Renderer、Chunk/模块 ID 和来源哈希，不代表组件已交互或实现正文已留存；
 - `metadata/baseline-assets.json`：页面启动和共享资源，资源正文不重复存储；
 - `metadata/components/*.json`：Input、Table 等组件各自的状态、首次观察资源引用、正文缺失、失败和已授权截图；
 - `evidence/`：仅在 Scope 设置 `captureStateScreenshots: true` 时保存的元素级状态截图；

@@ -97,6 +97,9 @@ HTML 只有同时满足以下条件时才允许保留：
 1. 连接唯一匹配 `pageHosts` 的页面，并验证 Chrome/MCP 前置条件。
 2. 执行仅含元数据的发现流程，取得一次汇总授权。
 3. 添加 Widget 前，采集并审计 `baseline`。在自动化模式下，`preloaded` 基线不能阻止目录遍历，只用于把已观察资源归类为 `baseline/shared`；现有的预加载停止门禁仅保留给被动/人工模式。
+   - 对 baseline 中已经保存的 JavaScript 执行本地解析，导出 `widget-inventory.json`；
+   - 只记录源码中已出现的 Type ID、Renderer 名称、Chunk ID、模块 ID 和来源 SHA-256；
+   - 不主动抓取或探测注册表引用的 Chunk；注册条目只表示 `registry-known`，不表示组件已可见、已添加或实现正文已留存。
 4. 打开可见 Add Widget 目录，通过无障碍快照构建内存队列，不使用隐藏注册表：
    - 按页面展示顺序遍历可见分类；
    - 在每个分类内，通过可见的键盘或滚动操作滚动目录面板并收集目录项；
@@ -200,6 +203,7 @@ delivery/
 ├── assets/                         # 资源实体全局去重
 ├── evidence/                       # Scope 允许时保存组件状态截图
 └── metadata/
+    ├── widget-inventory.json       # baseline 中的组件注册 Map
     ├── component-assets.json       # 全量机器索引
     ├── baseline-assets.json        # 页面启动和公共资源
     └── components/
@@ -208,6 +212,8 @@ delivery/
 ```
 
 每个组件视图把聚合模型中的 `firstObservedAssets` 表达为 `newlyObservedAssets`，并为每项资源补充合并后的 `file` 路径。该名称只表示资源首次在该组件状态期间被观察到，不表示资源由该组件独占。组件视图通过 `baselineAssetsFile` 指向独立基线，不重复嵌入公共资源。
+
+组件覆盖必须区分四层：`registry-known`（baseline 注册表存在）、`catalog-visible`（Add Widget 可见）、`interaction-confirmed`（状态事件存在）、`implementation-body-retained`（响应正文已保存）。后一层缺失不能反向把前一层报告为“组件不存在”或“未加载”。
 
 Scope 设置 `captureStateScreenshots: true` 时，每个成功状态可以保存唯一可见组件或配置面板的 PNG。截图路径使用稳定 Marker 和尝试序号；禁止全页截图，无法唯一定位可见目标时省略截图，不扩大采集范围。HTML 仍只指 Network 中的顶层或 Widget iframe Document，不代表运行后组件 DOM。
 

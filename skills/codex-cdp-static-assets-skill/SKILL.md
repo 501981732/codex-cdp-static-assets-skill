@@ -30,7 +30,7 @@ After the user approves that Scope once, run automatically without per-widget or
 
 1. Validate Scope with `automation-policy.mjs validate-scope`.
 2. Select the unique page matching `pageHosts`. Never inspect unrelated pages.
-3. Capture and import the `baseline`; in automation mode, a `preloaded` baseline is classified as shared evidence and does not stop widget traversal.
+3. Capture and import the `baseline`; in automation mode, a `preloaded` baseline is classified as shared evidence and does not stop widget traversal. Run `widget-inventory.mjs` against the retained baseline JS to export registry entries already present in those bodies. Treat them as expected inventory, not interaction evidence.
 4. Open Add Widget with visible UI. Repeatedly use `take_snapshot` and visible scroll/End operations until the catalog tracker reports two consecutive bottom observations with no new canonical widget key. Cross-snapshot repeats are deduplicated; two indistinguishable same-key entries in one snapshot stop as `catalog-identity-ambiguity`.
 5. Process widgets in deterministic catalog order. Keep at most `maxWidgetsPerPage` on `CDP Capture 001`, `CDP Capture 002`, and so on. Full-catalog mode may create pages only when `allowCreateCapturePages: true`; single-page mode records `blocked-page-capacity` at the limit.
 6. Locate an existing instance by capture page, canonical widget key, and recorded visible label before adding. Resume only missing states. Multiple matches stop as `blocked-existing-instance-ambiguous`; never add a duplicate to guess.
@@ -53,14 +53,16 @@ Never retain HTML from XHR, fetch, GraphQL, or an API. JavaScript/CSS bodies tha
 
 ## Hard boundaries
 
-Never use `evaluate_script`. Never set `requestFilePath`; `get_network_request` may receive only a response output path under the resolved `os.tmpdir()` staging root. Never clear/disable cache, bypass Service Workers, intercept requests, replay URLs, enumerate chunks, probe sourcemaps, expose hidden routes, change permissions, publish, execute actions/workflows, export data, or create/modify/delete data sources.
+Never use `evaluate_script`. Never set `requestFilePath`; `get_network_request` may receive only a response output path under the resolved `os.tmpdir()` staging root. Never clear/disable cache, bypass Service Workers, intercept requests, replay URLs, guess/probe additional chunks, probe sourcemaps, expose hidden routes, change permissions, publish, execute actions/workflows, export data, or create/modify/delete data sources. The baseline inventory may record Type IDs, Renderer names, Chunk IDs, and module IDs literally present in already retained JS, but must never retrieve those referenced chunks.
 
 Use only visible, authorized controls. `click`, `drag`, `fill`, `press_key`, `wait_for`, `take_snapshot`, authorized element-level `take_screenshot`, and exact-page reload are allowed only after the consolidated Scope is approved.
 
 ## Output and claims
 
-Each run contains content-addressed assets, redacted manifest entries, state attempts, optional state screenshots, risk/invalid events, and summary counters. The merged delivery contains the aggregate `metadata/component-assets.json`, `metadata/baseline-assets.json`, one reverse-engineering view per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated assets at their redacted delivery paths.
+Each run contains content-addressed assets, redacted manifest entries, `widget-inventory.json`, state attempts, optional state screenshots, risk/invalid events, and summary counters. The merged delivery contains `metadata/widget-inventory.json`, the aggregate `metadata/component-assets.json`, `metadata/baseline-assets.json`, one reverse-engineering view per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated assets at their redacted delivery paths.
 
 `component-assets.json` distinguishes `baseline/shared`, per-widget `firstObservedAssets`, `bodyUnavailable`, failures, and complete/partial state coverage. First observation is evidence of timing, not proof that a bundle belongs exclusively to that widget.
 
 Each per-Widget view renames this evidence to `newlyObservedAssets`, resolves every asset to its merged delivery `file`, and links to the separate baseline view. Approved Document HTML is a network document, not a serialized runtime Widget DOM.
+
+Keep the inventory layers distinct: baseline registry entries mean `registry-known`; visible Add Widget enumeration means `catalog-visible`; state events mean `interaction-confirmed`; retained bodies mean `implementation-body-retained`. Absence from a later layer must not rewrite an earlier layer as missing.

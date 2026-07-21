@@ -18,7 +18,17 @@ Automatically exercise every visible Widget and its naturally triggered loading 
 2. Mark `baseline`, inspect all observed hosts/statuses, and stop before body reads on any boundary violation.
 3. Wait for Network stability: the first observation is baseline; two additional identical `(requestId,status)` observations are required.
 4. Import eligible bodies immediately. HTML uses strict Document metadata. Record body gaps as `body-unavailable`.
-5. Classify baseline as `preloaded` or `lazy`. Automated full-catalog mode continues either way; baseline assets remain `baseline/shared` and can never become a widget's `firstObservedAssets`.
+5. Extract the Widget registry already present in retained baseline JavaScript:
+
+```bash
+node scripts/widget-inventory.mjs \
+  --capture ./capture-run-1 \
+  --output ./capture-run-1/widget-inventory.json
+```
+
+6. Classify baseline as `preloaded` or `lazy`. Automated full-catalog mode continues either way; baseline assets remain `baseline/shared` and can never become a widget's `firstObservedAssets`.
+
+`widget-inventory.json` is the expected registry layer. It records Type IDs, Renderer names, referenced Chunk IDs, module IDs, and the exact retained source hash. It does not fetch a referenced Chunk and does not prove the Widget was visible, added, rendered, or that its implementation body was retained.
 
 ## Phase 3: catalog enumeration
 
@@ -34,6 +44,8 @@ node scripts/automation-policy.mjs catalog-update \
 ```
 
 Canonical identity is visible category/label/version-or-type. The same key in later snapshots is one Widget. Two indistinguishable entries with the same key in one snapshot stop as `catalog-identity-ambiguity`.
+
+Keep the visible catalog queue separate from the baseline registry. Use the registry to detect coverage gaps and support later reverse engineering; use only the visible catalog to decide what can be added through the authorized UI.
 
 Catalog enumeration is complete only after reaching bottom and receiving two consecutive observations with no new key. Do not persist the accessibility snapshot or DOM.
 
@@ -124,7 +136,7 @@ node scripts/merge-captures.mjs --output ./delivery ./capture-run-1 ./capture-ru
 node scripts/audit-capture.mjs ./delivery
 ```
 
-The final `metadata/component-assets.json` remains the machine-readable aggregate. Merge also writes `metadata/baseline-assets.json` and one human-oriented file per Widget under `metadata/components/`. Each Widget view uses `newlyObservedAssets`, resolves assets to the merged delivery path, lists copied screenshots, and links to the separate baseline file. Resource bodies remain globally deduplicated.
+The final `metadata/component-assets.json` remains the machine-readable interaction aggregate. Merge also writes `metadata/widget-inventory.json`, `metadata/baseline-assets.json`, and one human-oriented file per interacted Widget under `metadata/components/`. Each Widget view uses `newlyObservedAssets`, resolves assets to the merged delivery path, lists copied screenshots, and links to the separate baseline and registry files. Resource bodies remain globally deduplicated.
 
 Document HTML means an observed top-level or Widget iframe network document. It is not a serialized post-render Widget DOM.
 

@@ -21,7 +21,7 @@ Visible actions are restricted to the approved Workshop Module: Add Widget, dete
 Never use `evaluate_script`. Never set `requestFilePath`.
 
 - Never fetch, replay, or guess a resource URL; never refetch a missing body.
-- Never inspect hidden DOM state, execute page-context JavaScript, expose hidden routes, enumerate chunk IDs, scan directories, or probe sourcemaps.
+- Never inspect hidden DOM state, execute page-context JavaScript, expose hidden routes, scan directories, guess/fetch Chunk URLs, or probe sourcemaps. Local post-processing may record IDs literally present in an already retained baseline registry body.
 - Never clear/disable cache, bypass a Service Worker, intercept traffic, or alter headers, signatures, origin, referer, fingerprint, requests, or responses.
 - Never extract or transfer cookies, Authorization values, passwords, request bodies, browser profiles, or unrelated tab metadata.
 - Never use full-page screenshots or retain accessibility/DOM snapshots. If the Widget or panel cannot be uniquely targeted, omit the screenshot instead of widening the evidence scope.
