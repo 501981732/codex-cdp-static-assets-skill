@@ -37,6 +37,14 @@ test('normalizes scope without auto-approving observed hosts', () => {
   assert.deepEqual(scope.approvedNetworkHosts, ['workshop.example.com', 'cdn.example.com', 'api.example.com']);
 });
 
+test('accepts html as an explicit scope type', () => {
+  const scope = normalizeScope({
+    pageHosts: ['workshop.example.com'],
+    types: ['html'],
+  });
+  assert.deepEqual([...scope.types], ['html']);
+});
+
 test('rejects empty, zero, HTML, invalid WASM, and invalid font bodies', () => {
   assert.equal(validateBody('js', Buffer.alloc(0)).reason, 'empty-body');
   assert.equal(validateBody('js', Buffer.alloc(4)).reason, 'all-zero-body');
@@ -44,6 +52,12 @@ test('rejects empty, zero, HTML, invalid WASM, and invalid font bodies', () => {
   assert.equal(validateBody('wasm', Buffer.from('nope')).reason, 'invalid-wasm-magic');
   assert.equal(validateBody('font', Buffer.from('nope')).reason, 'invalid-font-magic');
   assert.equal(validateBody('font', Buffer.from('wOF2')).accepted, true);
+});
+
+test('accepts document-shaped HTML and rejects JSON bodies for html', () => {
+  assert.equal(validateBody('html', Buffer.from('<!doctype html><title>Widget</title>')).accepted, true);
+  assert.equal(validateBody('html', Buffer.from('<html><body>Widget</body></html>')).accepted, true);
+  assert.equal(validateBody('html', Buffer.from('{"data":1}')).reason, 'invalid-html-body');
 });
 
 test('tracks one cumulative ledger budget', () => {

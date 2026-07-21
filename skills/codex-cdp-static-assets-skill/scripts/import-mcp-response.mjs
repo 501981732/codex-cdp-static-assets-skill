@@ -23,13 +23,20 @@ function normalizeResourceType(value = '') {
   if (normalized === 'stylesheet') return 'Stylesheet';
   if (normalized === 'font') return 'Font';
   if (normalized === 'image') return 'Image';
+  if (normalized === 'document') return 'Document';
+  if (normalized === 'fetch') return 'Fetch';
+  if (normalized === 'xhr') return 'XHR';
   return value;
 }
 
 export function classifyMcpResource({ resourceType = '', mimeType = '', url = '' }) {
   const type = normalizeResourceType(resourceType);
   const mime = mimeType.toLowerCase();
+  const essence = mime.split(';', 1)[0].trim();
   const path = url.toLowerCase().split(/[?#]/, 1)[0];
+  const htmlMime = essence === 'text/html' || essence === 'application/xhtml+xml';
+  if (type === 'Document') return htmlMime ? 'html' : null;
+  if ((type === 'Fetch' || type === 'XHR') && htmlMime) return null;
   if (type === 'Script' || mime.includes('javascript') || mime.includes('ecmascript') || /\.m?js$/.test(path)) return 'js';
   if (type === 'Stylesheet' || mime === 'text/css' || path.endsWith('.css')) return 'css';
   if (mime === 'application/wasm' || path.endsWith('.wasm')) return 'wasm';
@@ -39,7 +46,7 @@ export function classifyMcpResource({ resourceType = '', mimeType = '', url = ''
 }
 
 function extensionFor(kind, resourceUrl, mimeType = '') {
-  const known = new Set(['.js', '.mjs', '.css', '.wasm', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif']);
+  const known = new Set(['.js', '.mjs', '.css', '.wasm', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif', '.html', '.xhtml']);
   try {
     const path = new URL(resourceUrl).pathname.toLowerCase();
     const extension = [...known].find((candidate) => path.endsWith(candidate));
@@ -49,6 +56,7 @@ function extensionFor(kind, resourceUrl, mimeType = '') {
   if (kind === 'css') return '.css';
   if (kind === 'wasm') return '.wasm';
   if (kind === 'font') return mimeType.includes('woff2') ? '.woff2' : '.font';
+  if (kind === 'html') return mimeType.toLowerCase() === 'application/xhtml+xml' ? '.xhtml' : '.html';
   return '.bin';
 }
 
@@ -174,6 +182,31 @@ export async function importMcpResponse(input) {
   if (!kind || !scope.types.has(kind)) {
     await cleanupStagedBody();
     return { event: 'ignored', kind };
+  }
+  if (kind === 'html') {
+    const exactlyApproved = scope.approvedNetworkHosts.some((pattern) => (
+      !pattern.includes('*') && pattern.toLowerCase() === urlScope.host.toLowerCase()
+    ));
+    if (!exactlyApproved) {
+      await appendNdjson(riskPath, {
+        at: new Date().toISOString(),
+        kind: 'document-host-not-exactly-approved',
+        host: urlScope.host,
+        url: redactUrl(input.url),
+        backend: 'chrome-devtools-mcp-autoconnect',
+      });
+      await cleanupStagedBody();
+      throw new Error(`Document HTML host is not exactly approved: ${urlScope.host}`);
+    }
+    const safeDocumentRequest = input.requestMethod === 'GET'
+      && input.requestHasBody === false
+      && ['top-level', 'widget-iframe'].includes(input.documentContext)
+      && status >= 200
+      && status <= 399;
+    if (!safeDocumentRequest) {
+      await cleanupStagedBody();
+      return { event: 'ignored', kind, reason: 'unsafe-document-html' };
+    }
   }
   if (!hostIsAllowed(urlScope.host, scope.assetHosts)) {
     await appendNdjson(riskPath, {
@@ -313,7 +346,9 @@ function usage() {
   return `Usage:
   node import-mcp-response.mjs --scope FILE --output DIR --url URL --status CODE \\
     --resource-type TYPE [--mime-type MIME] [--body FILE] [--request-id ID] \\
-    [--marker LABEL] [--ledger FILE] [--staging-root DIR] [--delete-body]
+    [--request-method METHOD] [--request-has-body true|false] \\
+    [--document-context top-level|widget-iframe] [--marker LABEL] [--ledger FILE] \\
+    [--staging-root DIR] [--delete-body]
 
 Omit --body to record body-unavailable. This command never fetches a URL.
 `;
@@ -337,6 +372,13 @@ function parseArgs(argv) {
     else if (arg === '--status') options.status = next();
     else if (arg === '--resource-type') options.resourceType = next();
     else if (arg === '--mime-type') options.mimeType = next();
+    else if (arg === '--request-method') options.requestMethod = next();
+    else if (arg === '--request-has-body') {
+      const value = next();
+      if (!['true', 'false'].includes(value)) throw new Error('--request-has-body must be true or false');
+      options.requestHasBody = value === 'true';
+    }
+    else if (arg === '--document-context') options.documentContext = next();
     else if (arg === '--marker') options.marker = next();
     else if (arg === '--request-id') options.requestId = next();
     else if (arg === '--staging-root') options.stagingRoot = next();

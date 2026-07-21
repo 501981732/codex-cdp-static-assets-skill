@@ -57,7 +57,7 @@ export function normalizeScope(input) {
     throw new Error('Scope field stopOnStatuses must be an array of HTTP status codes');
   }
   const types = input.types ? new Set(requiredArray(input.types, 'types')) : new Set(DEFAULT_TYPES);
-  const validTypes = new Set(['js', 'css', 'wasm', 'font', 'image']);
+  const validTypes = new Set(['js', 'css', 'wasm', 'font', 'image', 'html']);
   for (const type of types) if (!validTypes.has(type)) throw new Error(`Unsupported scope type: ${type}`);
   return {
     caseId: typeof input.caseId === 'string' ? input.caseId : null,
@@ -76,6 +76,9 @@ export function validateBody(kind, body) {
   const textHead = body.subarray(0, 512).toString('utf8').trimStart().toLowerCase();
   if ((kind === 'js' || kind === 'css') && (textHead.startsWith('<!doctype html') || textHead.startsWith('<html') || textHead.includes('<head'))) {
     return { accepted: false, reason: `html-body-for-${kind}` };
+  }
+  if (kind === 'html' && !/^(?:<!doctype\s+html\b|<html\b)/i.test(textHead)) {
+    return { accepted: false, reason: 'invalid-html-body' };
   }
   if (kind === 'wasm' && !body.subarray(0, 4).equals(Buffer.from([0, 97, 115, 109]))) {
     return { accepted: false, reason: 'invalid-wasm-magic' };
