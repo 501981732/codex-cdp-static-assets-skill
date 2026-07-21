@@ -89,6 +89,6 @@ Publishing, actions/workflows, export, permission changes, production writes, hi
 
 ## Output
 
-Runs contain content-addressed assets, a baseline-derived Widget inventory, redacted manifests, component attempts, optional authorized element screenshots, risks/invalid bodies, and summaries. The merged delivery keeps globally deduplicated `assets/`, `metadata/widget-inventory.json`, the aggregate `metadata/component-assets.json`, shared evidence in `metadata/baseline-assets.json`, one reverse-engineering view per interacted Widget in `metadata/components/`, and optional screenshots under `evidence/`.
+Runs contain content-addressed assets, a baseline-derived Widget inventory, redacted manifests, component attempts, optional authorized element screenshots, risks/invalid bodies, and summaries. The merged delivery keeps globally deduplicated `assets/`, `metadata/widget-inventory.json`, the aggregate `metadata/component-assets.json`, shared evidence in `metadata/baseline-assets.json`, one reverse-engineering view per interacted Widget in `metadata/components/`, and optional screenshots under `evidence/`. The merged inventory adds `retainedEvidence` so declared Chunk/module IDs can be distinguished from implementation bodies actually retained in the delivery.
 
 `firstObservedAssets` excludes baseline and assigns each `(sha256, URL)` to only the earliest non-baseline Widget marker. It is timing evidence, not exclusive ownership.

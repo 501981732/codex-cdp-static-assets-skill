@@ -196,6 +196,8 @@ HTML 只有同时满足以下条件时才允许保留：
 
 对于因缓存而没有产生可观察证据的资源，不得虚构 `reused-by` 关系。
 
+合并后的 `widget-inventory.json` 必须保留注册表声明的 `chunkIds` 和 `moduleIds`，并增加 `retainedEvidence`。该字段只在本地已留存 JavaScript 中匹配 Webpack Chunk 声明和模块工厂，记录对应交付文件、未留存 ID，以及实现正文为已留存、部分留存或未留存。它不能把运行时引用误报为实现正文，也不能触发缺失 Chunk 的网络获取。
+
 为方便后续按组件逆向，合并产物还必须生成派生视图，但不能复制资源正文：
 
 ```text

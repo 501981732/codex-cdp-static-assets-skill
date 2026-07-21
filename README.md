@@ -98,7 +98,7 @@ XHR、fetch、GraphQL/API HTML 一律排除；JS/CSS 返回 HTML 仍记为无效
 - `metadata/source-manifest.ndjson`：带 `sourceRun` 的原始观察事件；
 - `metadata/component-events.ndjson`：全部状态尝试；
 - `metadata/component-assets.json`：Case、baseline、每个 Widget 的状态覆盖、首次观察资源、正文缺失和历史失败；
-- `metadata/widget-inventory.json`：baseline Bundle 已声明的 Type ID、Renderer、Chunk/模块 ID 和来源哈希，不代表组件已交互或实现正文已留存；
+- `metadata/widget-inventory.json`：baseline Bundle 已声明的 Type ID、Renderer、Chunk/模块 ID 和来源哈希；合并后通过 `retainedEvidence` 标出已落盘的 Chunk/模块文件、未留存 ID 和实现正文状态；
 - `metadata/baseline-assets.json`：页面启动和共享资源，资源正文不重复存储；
 - `metadata/components/*.json`：Input、Table 等组件各自的状态、首次观察资源引用、正文缺失、失败和已授权截图；
 - `evidence/`：仅在 Scope 设置 `captureStateScreenshots: true` 时保存的元素级状态截图；

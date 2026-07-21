@@ -56,12 +56,13 @@ test('merges source-run component events into component-assets.json', async () =
   const output = join(root, 'merged');
   await mkdir(join(run, 'assets', 'js'), { recursive: true });
   await mkdir(join(run, 'evidence', 'components', 'widget--object-table--a1b2c3d4'), { recursive: true });
-  await writeFile(join(run, 'assets', 'js', 'widget.js'), 'widget');
+  const widgetSource = '(self.webpackChunk=self.webpackChunk||[]).push([["123"],{456:(e)=>{}}]);';
+  await writeFile(join(run, 'assets', 'js', 'widget.js'), widgetSource);
   await writeFile(join(run, 'evidence', 'components', 'widget--object-table--a1b2c3d4', 'editor-mounted--1.png'), 'png');
   const marker = 'widget:object-table:a1b2c3d4:editor-mounted';
   await writeFile(join(run, 'manifest.ndjson'), `${JSON.stringify({
     at: '2026-07-21T00:00:01.000Z', event: 'saved', marker, kind: 'js', sha256: 'widget',
-    url: 'https://cdn.example/widget.js', size: 6, file: 'assets/js/widget.js',
+    url: 'https://cdn.example/widget.js', size: widgetSource.length, file: 'assets/js/widget.js',
   })}\n`);
   await writeFile(join(run, 'component-events.ndjson'), `${JSON.stringify({
     caseId: 'SEC-1', widgetKey: 'tables/object-table/v1', label: 'Object Table', category: 'Tables',
@@ -78,7 +79,7 @@ test('merges source-run component events into component-assets.json', async () =
     sources: [{ file: 'assets/js/widget.js', sha256: 'widget', url: 'https://cdn.example/widget.js', marker: 'baseline' }],
     entries: [{
       typeId: 'hubble.object-set-section.v1.oa-object-table', rendererName: 'ObjectTableSection',
-      chunkIds: ['123'], moduleIds: ['456'], sourceSha256: 'widget',
+      chunkIds: ['123', '999'], moduleIds: ['456', '888'], sourceSha256: 'widget',
     }],
   }));
 
@@ -99,9 +100,16 @@ test('merges source-run component events into component-assets.json', async () =
   assert.equal(componentView.baselineAssetsFile, '../baseline-assets.json');
   assert.equal(componentView.widgetInventoryFile, '../widget-inventory.json');
   assert.equal(widgetInventory.entries[0].typeId, 'hubble.object-set-section.v1.oa-object-table');
+  assert.deepEqual(widgetInventory.entries[0].retainedEvidence, {
+    status: 'implementation-body-partially-retained',
+    chunkAssets: [{ chunkId: '123', files: ['assets/cdn.example/widget.js'] }],
+    moduleAssets: [{ moduleId: '456', files: ['assets/cdn.example/widget.js'] }],
+    unretainedChunkIds: ['999'],
+    unretainedModuleIds: ['888'],
+  });
   assert.equal(componentView.component.firstObservedAssets, undefined);
   assert.deepEqual(componentView.component.newlyObservedAssets, [{
-    kind: 'js', sha256: 'widget', url: 'https://cdn.example/widget.js', size: 6,
+    kind: 'js', sha256: 'widget', url: 'https://cdn.example/widget.js', size: widgetSource.length,
     file: 'assets/cdn.example/widget.js',
   }]);
   assert.deepEqual(componentView.component.screenshots, [{

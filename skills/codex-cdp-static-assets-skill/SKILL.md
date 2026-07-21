@@ -59,7 +59,7 @@ Use only visible, authorized controls. `click`, `drag`, `fill`, `press_key`, `wa
 
 ## Output and claims
 
-Each run contains content-addressed assets, redacted manifest entries, `widget-inventory.json`, state attempts, optional state screenshots, risk/invalid events, and summary counters. The merged delivery contains `metadata/widget-inventory.json`, the aggregate `metadata/component-assets.json`, `metadata/baseline-assets.json`, one reverse-engineering view per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated assets at their redacted delivery paths.
+Each run contains content-addressed assets, redacted manifest entries, `widget-inventory.json`, state attempts, optional state screenshots, risk/invalid events, and summary counters. The merged delivery contains `metadata/widget-inventory.json`, the aggregate `metadata/component-assets.json`, `metadata/baseline-assets.json`, one reverse-engineering view per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated assets at their redacted delivery paths. The merged Widget inventory resolves registry-declared Chunk/module IDs against retained JavaScript and records matching delivery files plus unretained IDs; it never fetches a missing dependency.
 
 `component-assets.json` distinguishes `baseline/shared`, per-widget `firstObservedAssets`, `bodyUnavailable`, failures, and complete/partial state coverage. First observation is evidence of timing, not proof that a bundle belongs exclusively to that widget.
 

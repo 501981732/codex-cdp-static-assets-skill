@@ -170,6 +170,68 @@ function mergeWidgetInventories(inventories, inputs, caseId, generatedAt) {
   };
 }
 
+function extractWebpackEvidence(source) {
+  const chunkIds = new Set();
+  const moduleIds = new Set();
+  for (const match of source.matchAll(/\.push\(\s*\[\s*\[\s*((?:["']?\d+["']?\s*,?\s*)+)\]/g)) {
+    for (const id of match[1].matchAll(/\d+/g)) chunkIds.add(id[0]);
+  }
+  for (const match of source.matchAll(/(?:^|[,{])\s*["']?(\d+)["']?\s*:\s*(?:function\b|(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>)/g)) {
+    moduleIds.add(match[1]);
+  }
+  return { chunkIds, moduleIds };
+}
+
+async function addRetainedWidgetEvidence(widgetInventory, mergedManifest, output) {
+  if (!widgetInventory) return null;
+  const chunkFiles = new Map();
+  const moduleFiles = new Map();
+  const addFile = (index, id, file) => {
+    const files = index.get(id) || new Set();
+    files.add(file);
+    index.set(id, files);
+  };
+  for (const asset of mergedManifest.filter((entry) => entry.kind === 'js' && entry.file)) {
+    const evidence = extractWebpackEvidence(await readFile(join(output, asset.file), 'utf8'));
+    for (const id of evidence.chunkIds) addFile(chunkFiles, id, asset.file);
+    for (const id of evidence.moduleIds) addFile(moduleFiles, id, asset.file);
+  }
+  const entries = widgetInventory.entries.map((entry) => {
+    const chunkAssets = entry.chunkIds
+      .filter((id) => chunkFiles.has(id))
+      .map((id) => ({ chunkId: id, files: [...chunkFiles.get(id)].sort() }));
+    const moduleAssets = entry.moduleIds
+      .filter((id) => moduleFiles.has(id))
+      .map((id) => ({ moduleId: id, files: [...moduleFiles.get(id)].sort() }));
+    const unretainedChunkIds = entry.chunkIds.filter((id) => !chunkFiles.has(id));
+    const unretainedModuleIds = entry.moduleIds.filter((id) => !moduleFiles.has(id));
+    let status = 'no-entry-module-declared';
+    if (entry.moduleIds.length && moduleAssets.length === entry.moduleIds.length) status = 'implementation-body-retained';
+    else if (moduleAssets.length) status = 'implementation-body-partially-retained';
+    else if (entry.moduleIds.length) status = 'implementation-body-not-retained';
+    return {
+      ...entry,
+      retainedEvidence: {
+        status,
+        chunkAssets,
+        moduleAssets,
+        unretainedChunkIds,
+        unretainedModuleIds,
+      },
+    };
+  });
+  return {
+    ...widgetInventory,
+    summary: {
+      ...widgetInventory.summary,
+      implementationBodiesRetained: entries.filter((entry) => entry.retainedEvidence.status === 'implementation-body-retained').length,
+      implementationBodiesPartiallyRetained: entries.filter((entry) => entry.retainedEvidence.status === 'implementation-body-partially-retained').length,
+      implementationBodiesNotRetained: entries.filter((entry) => entry.retainedEvidence.status === 'implementation-body-not-retained').length,
+    },
+    entries,
+  };
+}
+
 async function writeReverseEngineeringViews({ componentCoverage, mergedManifest, widgetInventory, inputs, output, metadata }) {
   const mergedByIdentity = new Map(mergedManifest.map((entry) => [`${entry.sha256}\n${entry.url}`, entry]));
   const inputByRun = new Map(inputs.map((input) => [basename(input), input]));
@@ -305,7 +367,8 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
 
   const createdAt = new Date().toISOString();
   const componentCoverage = caseId ? buildComponentCoverage({ caseId, events: componentEvents, manifest: sourceManifest, generatedAt: createdAt }) : null;
-  const widgetInventory = caseId ? mergeWidgetInventories(inputWidgetInventories, inputs, caseId, createdAt) : null;
+  const declaredWidgetInventory = caseId ? mergeWidgetInventories(inputWidgetInventories, inputs, caseId, createdAt) : null;
+  const widgetInventory = await addRetainedWidgetEvidence(declaredWidgetInventory, mergedManifest, output);
   const componentSummary = componentCoverage?.summary || { total: 0, complete: 0, partial: 0 };
   const summary = {
     createdAt,

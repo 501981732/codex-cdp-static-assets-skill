@@ -136,7 +136,7 @@ node scripts/merge-captures.mjs --output ./delivery ./capture-run-1 ./capture-ru
 node scripts/audit-capture.mjs ./delivery
 ```
 
-The final `metadata/component-assets.json` remains the machine-readable interaction aggregate. Merge also writes `metadata/widget-inventory.json`, `metadata/baseline-assets.json`, and one human-oriented file per interacted Widget under `metadata/components/`. Each Widget view uses `newlyObservedAssets`, resolves assets to the merged delivery path, lists copied screenshots, and links to the separate baseline and registry files. Resource bodies remain globally deduplicated.
+The final `metadata/component-assets.json` remains the machine-readable interaction aggregate. Merge also writes `metadata/widget-inventory.json`, `metadata/baseline-assets.json`, and one human-oriented file per interacted Widget under `metadata/components/`. The merged Widget inventory keeps the registry-declared IDs and adds `retainedEvidence`: matching Chunk/module delivery files, unretained IDs, and an implementation-body retention status. This is local evidence resolution only and never retrieves a missing dependency. Each Widget view uses `newlyObservedAssets`, resolves assets to the merged delivery path, lists copied screenshots, and links to the separate baseline and registry files. Resource bodies remain globally deduplicated.
 
 Document HTML means an observed top-level or Widget iframe network document. It is not a serialized post-render Widget DOM.
 
