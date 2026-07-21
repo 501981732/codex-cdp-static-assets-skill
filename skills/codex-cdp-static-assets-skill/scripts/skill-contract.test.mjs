@@ -67,13 +67,21 @@ test('skill defines one-authorization automated widget capture with explicit bou
 
   const affirmativeCheckpointRequirements = [];
   for (const document of [skill, readme, readmeEnglish, runbook]) {
-    const headings = [...document.matchAll(/^#{2,6}\s+(.+)$/gm)];
-    const sections = headings.map((heading, index) => ({
-      title: heading[1],
-      body: document.slice(heading.index + heading[0].length, headings[index + 1]?.index ?? document.length),
-    }));
+    const headings = [...document.matchAll(/^(#{2,6})\s+(.+)$/gm)];
+    const hierarchy = [];
+    const sections = headings.map((heading, index) => {
+      const depth = heading[1].length;
+      hierarchy.length = depth;
+      const manual = /(?:manual|passive|人工|被动)/i.test(heading[2]) || hierarchy.slice(0, depth - 1).some(Boolean);
+      hierarchy[depth - 1] = manual;
+      return {
+        title: heading[2],
+        manual,
+        body: document.slice(heading.index + heading[0].length, headings[index + 1]?.index ?? document.length),
+      };
+    });
     for (const section of sections) {
-      if (/(?:manual|passive|人工|被动)/i.test(section.title)) continue;
+      if (section.manual) continue;
       for (const match of section.body.matchAll(/P[12]\s*(?:完成|complete)/gi)) {
         const preceding = section.body.slice(Math.max(0, match.index - 100), match.index);
         if (/(?:无需|不再|不得|禁止|does not|do not|never|no longer)[^\n]{0,80}$/i.test(preceding)) continue;
