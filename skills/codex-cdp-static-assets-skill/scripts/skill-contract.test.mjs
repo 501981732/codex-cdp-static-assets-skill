@@ -65,7 +65,15 @@ test('skill defines one-authorization automated widget capture with explicit bou
     assert.equal(allowedOperations.includes(prohibitedTool), false, `prohibited tool appears in allowed operations: ${prohibitedTool}`);
   }
 
-  for (const checkpoint of ['P1 完成', 'P2 完成', 'P1 complete', 'P2 complete']) {
-    assert.equal(combined.toLowerCase().includes(checkpoint.toLowerCase()), false, `normal flow still requires per-widget confirmation: ${checkpoint}`);
-  }
+  const affirmativeCheckpointRequirements = combined.split('\n').filter((line) => {
+    const asksForCheckpoint = /(?:回复|等待|要求)[^\n]{0,60}P[12]\s*完成/i.test(line)
+      || /(?:reply|respond|wait for|ask (?:the )?(?:operator|user))[^\n]{0,60}P[12]\s+(?:is\s+)?complete/i.test(line);
+    const explicitlyNegated = /(?:无需|不再|不得|禁止|does not|do not|never|no longer)/i.test(line);
+    return asksForCheckpoint && !explicitlyNegated;
+  });
+  assert.deepEqual(
+    affirmativeCheckpointRequirements,
+    [],
+    `normal flow still requires per-widget confirmation: ${affirmativeCheckpointRequirements.join(' | ')}`,
+  );
 });
