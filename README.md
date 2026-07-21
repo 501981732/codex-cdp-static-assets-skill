@@ -45,7 +45,7 @@ npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
 3. 重启 Codex；在 Chrome 打开 `chrome://inspect/#remote-debugging`，启用 Remote debugging，再打开要采集的 Workshop 页面。
 4. 最好使用专门的测试 Module。采集会新增页面、添加组件、改组件配置并自动保存。
 
-如果有 Object Table 这类必须选数据的组件，Skill 可以在专用测试 Module 中新建带 `CDP Capture` 标识的测试变量，也可以使用组件界面明确显示为兼容的已有变量。它不会修改或删除任何变量，也不会创建、修改或删除数据源。
+如果有 Object Table 这类必须选数据的组件，Skill 可以在专用测试 Module 中新建、修改、删除变量，也可以使用组件界面明确显示为兼容的已有变量；这些动作都要在一次性授权中明确列出。它不会创建、修改或删除数据源。
 
 ## 直接这样提需求
 
@@ -57,7 +57,7 @@ https://workshop.example.com/module/edit/...
 
 Case ID：SEC-2026-001
 这是专用测试 Module。允许新建 CDP Capture 页面、添加和配置 Widget，并自动保存。
-允许新建带 CDP Capture 标识的专用测试变量，也允许使用当前 Module 中已有且组件界面明确兼容的变量；不要修改或删除变量，也不要创建、修改或删除数据源。
+允许在这个 Module 中新建、修改、删除变量，也允许使用组件界面明确兼容的已有变量；采集完成后可清理 CDP Capture 测试变量。不要创建、修改或删除数据源。
 请先只做主机和组件入口的发现，把要操作的内容、每页 Widget 上限和数据源策略汇总给我；我一次授权后全自动执行。
 采集 js、css、wasm、image，以及自然加载的页面或 Widget iframe HTML；默认不采集字体。
 ```

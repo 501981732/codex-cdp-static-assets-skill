@@ -73,6 +73,12 @@ export function normalizeAutomationPolicy(input = {}) {
   if (automation.allowCreateTestVariables !== undefined && typeof automation.allowCreateTestVariables !== 'boolean') {
     throw new Error('Automation allowCreateTestVariables must be a boolean');
   }
+  if (automation.allowModifyModuleVariables !== undefined && typeof automation.allowModifyModuleVariables !== 'boolean') {
+    throw new Error('Automation allowModifyModuleVariables must be a boolean');
+  }
+  if (automation.allowDeleteModuleVariables !== undefined && typeof automation.allowDeleteModuleVariables !== 'boolean') {
+    throw new Error('Automation allowDeleteModuleVariables must be a boolean');
+  }
 
   const fixtureProfiles = input.fixtureProfiles || {};
   if (!fixtureProfiles || Array.isArray(fixtureProfiles) || typeof fixtureProfiles !== 'object') throw new Error('fixtureProfiles must be an object');
@@ -93,6 +99,8 @@ export function normalizeAutomationPolicy(input = {}) {
     allowCreateCapturePages: automation.allowCreateCapturePages,
     allowExistingModuleVariables: automation.allowExistingModuleVariables === true,
     allowCreateTestVariables: automation.allowCreateTestVariables === true,
+    allowModifyModuleVariables: automation.allowModifyModuleVariables === true,
+    allowDeleteModuleVariables: automation.allowDeleteModuleVariables === true,
     captureStateScreenshots: automation.captureStateScreenshots === true,
     maxWidgetsPerPage: automation.maxWidgetsPerPage,
     states: Object.freeze(normalizedStates),

@@ -66,6 +66,8 @@ test('normalizes the automation and synthetic fixture policy with the capture sc
       allowAutosave: true,
       allowCreateCapturePages: false,
       allowCreateTestVariables: true,
+      allowModifyModuleVariables: true,
+      allowDeleteModuleVariables: true,
       maxWidgetsPerPage: 5,
       states: ['editor-mounted', 'data-bound', 'preview-visible'],
     },
@@ -74,6 +76,8 @@ test('normalizes the automation and synthetic fixture policy with the capture sc
   });
   assert.equal(scope.automation.mode, 'single-page');
   assert.equal(scope.automation.allowCreateTestVariables, true);
+  assert.equal(scope.automation.allowModifyModuleVariables, true);
+  assert.equal(scope.automation.allowDeleteModuleVariables, true);
   assert.deepEqual(scope.fixtureProfileNames, ['objects']);
   assert.deepEqual(scope.widgetFixtureMap, { 'tables/object-table/v1': 'objects' });
   assert.equal(scope.authorization.moduleId, 'module-1');

@@ -9,7 +9,7 @@ Automatically exercise every visible Widget and its naturally triggered loading 
 1. Connect to the signed-in default Chrome with MCP `--autoConnect` and select the unique exact `pageHosts` page.
 2. Keep snapshots and page-list results in memory. Use `take_snapshot` to verify the approved Module and visible Add Widget entry point.
 3. Use `list_network_requests` without body reads to list exact current hosts and statuses.
-4. Present the exact host candidates, automation mode, autosave/page-creation actions, the three-state matrix, optional element-level screenshots, asset limits, existing Module variable policy, and optional fixture overrides as a **single consolidated authorization**.
+4. Present the exact host candidates, automation mode, autosave/page-creation actions, all authorized variable mutations, the three-state matrix, optional element-level screenshots, asset limits, and optional fixture overrides as a **single consolidated authorization**.
 5. Write and validate `capture-scope.json`. Do not mutate before approval.
 
 ## Phase 2: baseline
@@ -76,7 +76,7 @@ node scripts/automation-policy.mjs marker \
 Then run states in this order:
 
 1. `editor-mounted`: use `click` or visible `drag` to add; verify the unique visible instance. If needed, scroll it into the viewport before recording this state; viewport visibility is an execution guard, not another coverage state.
-2. `data-bound`: only for a Widget with a visible data-input capability. Open configuration and inspect visible requiredness. When `allowCreateTestVariables` is true, create the mapped dedicated `CDP Capture` test variable through visible UI, then select it; otherwise prefer an exact existing mapped fixture. When `allowExistingModuleVariables` is true, keep a compatible current selection or choose the first enabled option exposed by the visible typed variable selector. If none exists, record `not-requested` for an optional source or `blocked-missing-fixture` for a required source and continue. Never modify or delete a variable or data source. Use `fill` only for authorized visible configuration fields. Autosave is the only allowed persistence.
+2. `data-bound`: only for a Widget with a visible data-input capability. Open configuration and inspect visible requiredness. Create mapped `CDP Capture` variables only with `allowCreateTestVariables`; modify compatible variables only with `allowModifyModuleVariables`; select existing variables only with `allowExistingModuleVariables`; and delete cleanup variables only with `allowDeleteModuleVariables`. If no permitted compatible path exists, record `not-requested` for an optional source or `blocked-missing-fixture` for a required source and continue. Never create, modify, or delete a data source. Use `fill` only for authorized visible configuration fields. Autosave is the only allowed persistence.
 3. `preview-visible`: enter preview, scroll the instance into view, and wait for visible rendering. Keep this separate because preview can load a runtime bundle that editor mounting does not.
 
 After successful data configuration, scroll back to the Widget before capture so configuration-driven lazy rendering is not missed.

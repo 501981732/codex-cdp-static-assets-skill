@@ -104,6 +104,8 @@ test('provenance records only non-sensitive automation policy and fixture names'
     allowCreateCapturePages: false,
     allowExistingModuleVariables: true,
     allowCreateTestVariables: true,
+    allowModifyModuleVariables: true,
+    allowDeleteModuleVariables: true,
     captureStateScreenshots: true,
     maxWidgetsPerPage: 5,
     states: ['editor-mounted', 'data-bound', 'preview-visible'],
@@ -138,6 +140,8 @@ test('provenance records only non-sensitive automation policy and fixture names'
   assert.equal(provenance.automation.captureStateScreenshots, true);
   assert.equal(provenance.automation.allowExistingModuleVariables, true);
   assert.equal(provenance.automation.allowCreateTestVariables, true);
+  assert.equal(provenance.automation.allowModifyModuleVariables, true);
+  assert.equal(provenance.automation.allowDeleteModuleVariables, true);
   assert.equal(provenanceText.includes('must-not-persist'), false);
   assert.equal(provenanceText.includes('CDP Objects'), false);
   assert.equal(provenanceText.includes('synthetic-tester'), false);
