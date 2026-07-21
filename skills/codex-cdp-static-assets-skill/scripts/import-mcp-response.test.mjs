@@ -87,6 +87,7 @@ test('imports an MCP response into the existing audited capture format', async (
   assert.deepEqual(await auditCapture(paths.output), {
     output: paths.output,
     manifest: 'manifest.ndjson',
+    componentAssets: null,
     totalFiles: 1,
     validFiles: 1,
     invalid: [],

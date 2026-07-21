@@ -7,14 +7,101 @@ import { fileURLToPath } from 'node:url';
 
 import { validateBody } from './capture-core.mjs';
 
+const COMPONENT_STATE_STATUSES = new Set([
+  'captured', 'not-applicable', 'not-requested', 'failed', 'missing',
+  'blocked-missing-fixture', 'blocked-page-capacity', 'blocked-existing-instance-ambiguous',
+]);
+
 async function walk(directory) {
   const files = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+  for (const entry of entries) {
     const target = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...await walk(target));
     else files.push(target);
   }
   return files;
+}
+
+async function readNdjson(file) {
+  if (!await exists(file)) return [];
+  return (await readFile(file, 'utf8')).split('\n').filter(Boolean).map((line) => JSON.parse(line));
+}
+
+function sameValues(left, right) {
+  return JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+}
+
+async function auditComponentAssets(output, manifestEntries) {
+  const componentPath = join(output, 'component-assets.json');
+  const mergeSummaryPath = join(output, 'metadata', 'merge-summary.json');
+  if (!await exists(componentPath)) {
+    return {
+      file: null,
+      invalid: await exists(mergeSummaryPath) ? [{ file: 'component-assets.json', reason: 'component-assets-missing' }] : [],
+    };
+  }
+  let model;
+  try {
+    model = JSON.parse(await readFile(componentPath, 'utf8'));
+  } catch {
+    return { file: 'component-assets.json', invalid: [{ file: 'component-assets.json', reason: 'component-assets-invalid-json' }] };
+  }
+  const invalid = [];
+  const add = (reason, detail) => invalid.push({ file: 'component-assets.json', reason, ...(detail ? { detail } : {}) });
+  if (model.schemaVersion !== 1 || !Array.isArray(model.components) || !model.baseline || typeof model.summary !== 'object') {
+    add('component-assets-invalid-schema');
+    return { file: 'component-assets.json', invalid };
+  }
+  const manifestAssets = new Set(manifestEntries.filter((entry) => entry.event === 'saved').map((entry) => `${entry.sha256}\n${entry.url}`));
+  const sourceManifest = await readNdjson(join(output, 'metadata', 'source-manifest.ndjson'));
+  const unavailable = new Set(sourceManifest.filter((entry) => entry.event === 'body-unavailable').map((entry) => `${entry.sourceRun}\n${entry.requestId}\n${entry.url}`));
+  const recordedAttempts = new Set((await readNdjson(join(output, 'metadata', 'component-events.ndjson'))).map((entry) => `${entry.sourceRun}\n${entry.attemptId}`));
+  const identities = new Set();
+  for (const component of model.components) {
+    const identity = `${component.capturePage}\n${component.widgetKey}`;
+    if (identities.has(identity)) add('component-identity-duplicate', identity);
+    identities.add(identity);
+    if (!['complete', 'partial'].includes(component.coverageStatus)
+      || !Array.isArray(component.requiredStates) || !Array.isArray(component.coveredStates)
+      || !Array.isArray(component.blockedStates) || !component.states || !Array.isArray(component.attempts)
+      || !Array.isArray(component.firstObservedAssets) || !Array.isArray(component.bodyUnavailable)) {
+      add('component-record-invalid-schema', identity);
+      continue;
+    }
+    const stateEntries = Object.entries(component.states);
+    if (stateEntries.some(([, status]) => !COMPONENT_STATE_STATUSES.has(status))) add('component-state-status-invalid', identity);
+    const covered = stateEntries.filter(([, status]) => status === 'captured').map(([state]) => state);
+    const blocked = stateEntries.filter(([, status]) => status === 'failed' || String(status).startsWith('blocked-')).map(([state]) => state);
+    if (!sameValues(covered, component.coveredStates) || !sameValues(blocked, component.blockedStates)) add('component-state-index-inconsistent', identity);
+    const shouldBeComplete = component.requiredStates.every((state) => component.states[state] === 'captured') && blocked.length === 0;
+    if ((component.coverageStatus === 'complete') !== shouldBeComplete) add('component-coverage-status-inconsistent', identity);
+    for (const asset of component.firstObservedAssets) {
+      if (!manifestAssets.has(`${asset.sha256}\n${asset.url}`)) add('component-asset-not-in-manifest', `${identity}\n${asset.sha256}`);
+    }
+    for (const attempt of component.attempts) {
+      if (!recordedAttempts.has(`${attempt.sourceRun}\n${attempt.attemptId}`)) add('component-attempt-not-in-events', `${identity}\n${attempt.attemptId}`);
+    }
+    for (const entry of component.bodyUnavailable) {
+      if (!unavailable.has(`${entry.sourceRun}\n${entry.requestId}\n${entry.url}`)) add('component-body-unavailable-not-in-manifest', identity);
+    }
+  }
+  for (const asset of model.baseline.assets || []) {
+    if (!manifestAssets.has(`${asset.sha256}\n${asset.url}`)) add('baseline-asset-not-in-manifest', asset.sha256);
+  }
+  const expectedSummary = {
+    total: model.components.length,
+    complete: model.components.filter((component) => component.coverageStatus === 'complete').length,
+    partial: model.components.filter((component) => component.coverageStatus === 'partial').length,
+  };
+  if (JSON.stringify(model.summary) !== JSON.stringify(expectedSummary)) add('component-summary-inconsistent');
+  return { file: 'component-assets.json', invalid };
 }
 
 async function exists(file) {
@@ -73,7 +160,17 @@ export async function auditCapture(outputDirectory) {
     if (entry.file && !observed.has(entry.file)) invalid.push({ file: entry.file, reason: 'manifest-file-missing' });
   }
 
-  return { output, manifest: manifest.file ? relative(output, manifest.file) : null, totalFiles: files.length, validFiles, invalid };
+  const componentAudit = await auditComponentAssets(output, manifest.entries);
+  invalid.push(...componentAudit.invalid);
+
+  return {
+    output,
+    manifest: manifest.file ? relative(output, manifest.file) : null,
+    componentAssets: componentAudit.file,
+    totalFiles: files.length,
+    validFiles,
+    invalid,
+  };
 }
 
 async function main() {
