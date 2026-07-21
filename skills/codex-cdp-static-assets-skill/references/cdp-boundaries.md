@@ -1,42 +1,50 @@
-# MCP Passive-Capture Boundaries
+# CDP Automation Boundaries
 
 ## Allowed operations
 
-Use only the selected page's existing Network record:
+Only after the single consolidated authorization, use these Chrome DevTools MCP operations on the unique approved page:
 
-| Purpose | MCP tool |
+| Purpose | MCP operation |
 |---|---|
-| Enumerate open pages | `list_pages` |
-| Select the approved page | `select_page` |
-| Inspect observed requests | `list_network_requests` |
+| Enumerate/select the exact target | `list_pages`, `select_page` |
+| Read visible UI state | `take_snapshot` |
+| Reload only the exact approved page | `navigate_page` with reload |
+| Use visible controls | `click`, `drag`, `fill`, `press_key`, `wait_for` |
+| Inspect already observed requests | `list_network_requests` |
 | Read one completed response | `get_network_request` with `reqid` and `responseFilePath` |
 
-`get_network_request` reads Chrome's buffered response. It must not issue another HTTP request. Import the staged body with `import-mcp-response.mjs`, calculate a local SHA-256, and persist only selected response metadata. Never set `requestFilePath` or retain Cookie, Authorization, Set-Cookie, POST bodies, or raw signed query values.
+Visible actions are restricted to the approved Workshop Module: Add Widget, deterministic capture-page creation, canvas/catalog scrolling, widget configuration, exact synthetic fixture selection, autosave, and preview.
 
 ## Prohibited operations
 
-- Browser navigation, reload, automated clicks, or page-context script execution
-- URL fetching, replay, guessing, chunk-ID enumeration, directory scanning, or sourcemap probing
-- Cache clearing, cache disabling, Service Worker bypass, or request interception
-- Header, referer, origin, signature, fingerprint, or response alteration
-- Cookie, token, password, request-body, or profile extraction and transfer
-- DOM, Cache Storage, debugger source, or CSS-domain extraction for this inventory
+Never use `evaluate_script`. Never set `requestFilePath`.
 
-## Cache semantics
+- Never fetch, replay, or guess a resource URL; never refetch a missing body.
+- Never inspect hidden DOM state, execute page-context JavaScript, expose hidden routes, enumerate chunk IDs, scan directories, or probe sourcemaps.
+- Never clear/disable cache, bypass a Service Worker, intercept traffic, or alter headers, signatures, origin, referer, fingerprint, requests, or responses.
+- Never extract or transfer cookies, Authorization values, passwords, request bodies, browser profiles, or unrelated tab metadata.
+- Never publish, run actions/workflows, export, change permissions, write production data, or create/modify/delete a data source.
 
-- Select the approved page before the operator refreshes it.
-- Preserve normal cache and Service Worker behavior.
-- A cached response may expose a body; save it only when Chrome already has it.
-- If the body is unavailable, record the error. Never compensate with an active request or another browser session.
-- Ingest each batch before navigating away because the MCP Network record is not an indefinite event archive.
+## Response-body rule
 
-## Default Chrome privacy
+`list_network_requests` and `get_network_request` inspect Chrome's current local Network record and must not cause a new HTTP request. Always inspect exact hosts and stop statuses before body access. Stage a response only below the runtime value of `os.tmpdir()`, import immediately, and request importer cleanup.
 
-- Chrome 144+ and explicit permission at `chrome://inspect/#remote-debugging` are required.
-- MCP can enumerate all windows in the selected default profile. Close unrelated sensitive pages when practical.
-- Select only the unique top-level page matching `pageHosts`; never persist unrelated page URLs, titles, or metadata.
-- If the MCP tools are unavailable or blocked by enterprise policy, pause and report the prerequisite.
+If Chrome returns no body, append `body-unavailable`. A local staging-path failure may retry the same request ID after correcting the local path; a true browser body gap is final for that observation.
+
+## HTML rule
+
+HTML is eligible only for an approved `Document` response with exact `text/html` or `application/xhtml+xml` MIME essence, a completed bodyless `GET`, status 200–399, an exact approved host, and `top-level` or `widget-iframe` context. XHR/fetch/API HTML is excluded.
+
+## UI and identity rule
+
+All mutation must be observable through snapshots and visible controls. Never infer success from a click alone. Verify the visible widget instance before continuing. If the Add Widget result or resume target is ambiguous, stop rather than adding again.
+
+Canonical widget identity is derived only from visible label, category, and version/type. Accessibility snapshots stay in memory; state files retain only canonical keys, counters, and request ID/status fingerprints.
+
+## Stop conditions
+
+Stop before further body reads or UI mutation on an unknown host, page/Module drift, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, unexpected write, missing synthetic fixture authority, traffic/time ceiling, or owner/SOC instruction.
 
 ## Data handling
 
-Redact all query values and URL fragments in manifests. Store resource content under `assets/<kind>/<sha256>.<ext>` and keep component/scenario markers separately. Restrict output permissions because deployed bundles can still contain internal endpoints, identifiers, and implementation details.
+Redact every query value and URL fragment. Preserve SHA-256, size, type, status, marker, source run, and structured failure evidence. First-observed attribution excludes baseline assets and is globally assigned only to the earliest non-baseline widget marker.

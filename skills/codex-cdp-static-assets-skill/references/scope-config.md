@@ -1,36 +1,10 @@
 # Scope Configuration
 
-Use a JSON Scope file for every live session. It is both the execution boundary and the audit record.
+The JSON Scope is both the one-time authorization boundary and an audit input. Metadata discovery never promotes a host automatically.
 
-## Written authorization
+## Required authorization
 
-Record the case ID, test account, page host, time window, owner/SOC contact, allowed UI scenarios, permitted asset types, traffic ceiling, and stop conditions.
-
-Component addition may autosave. Written scope must explicitly allow creating or editing the dedicated test module and that autosave. Unless separately approved, forbid publish, action, workflow, export, delete, permission-change, and production-writeback behavior.
-
-## Discovery Scope
-
-Start with only the page host. Discovery records naturally observed HTTP(S) and WebSocket host metadata; it never reads response bodies.
-
-```json
-{
-  "caseId": "SEC-2026-001",
-  "pageHosts": ["workshop.example.com"],
-  "types": ["js", "css", "wasm", "font"],
-  "limits": {
-    "maxAssets": 0,
-    "maxTotalMiB": 0,
-    "maxAssetMiB": 50
-  },
-  "stopOnStatuses": [401, 403, 429]
-}
-```
-
-After one representative discovery pass, review `observed-network-hosts.json`, `observed-hosts.json`, and `scope-candidates.json`. Candidates are evidence for one batch approval, never automatic trust.
-
-## Capture Scope
-
-Add exact approved static hosts to `assetHosts`. Page hosts may serve same-origin assets. Put separately approved normal page dependencies whose bodies must not be saved in `approvedNetworkHosts`.
+Record the case ID, exact page host/Module, test account, time and traffic ceilings, stop contact, asset types, autosave permission, capture-page permission, and exact existing synthetic fixtures. The authorization permits only visible Workshop edits needed for capture.
 
 ```json
 {
@@ -38,38 +12,78 @@ Add exact approved static hosts to `assetHosts`. Page hosts may serve same-origi
   "pageHosts": ["workshop.example.com"],
   "assetHosts": ["cdn.workshop.example.com"],
   "approvedNetworkHosts": ["api.workshop.example.com"],
-  "types": ["js", "css", "wasm", "font"],
+  "types": ["js", "css", "wasm", "font", "image", "html"],
   "limits": {
     "maxAssets": 0,
     "maxTotalMiB": 0,
     "maxAssetMiB": 50
   },
-  "stopOnStatuses": [401, 403, 429]
+  "stopOnStatuses": [401, 403, 429],
+  "automation": {
+    "enabled": true,
+    "mode": "full-catalog",
+    "allowAutosave": true,
+    "allowCreateCapturePages": true,
+    "maxWidgetsPerPage": 8,
+    "states": [
+      "editor-mounted",
+      "viewport-visible",
+      "config-opened",
+      "data-bound",
+      "preview-visible"
+    ]
+  },
+  "fixtureProfiles": {
+    "objects": {
+      "kind": "synthetic-object-set",
+      "visibleOption": "CDP Synthetic Objects"
+    }
+  },
+  "widgetFixtureMap": {
+    "tables/object-table/v1": "objects"
+  }
 }
 ```
 
-Do not use broad CDN/vendor wildcards or allow-any. Stop on a new host and approve its exact hostname before a new run.
+Validate before mutation:
 
-Reuse one append-only Ledger for every strict run. Pass the same `--ledger` path to `import-mcp-response.mjs` for every approved response body.
+```bash
+node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
+```
 
-Hard cumulative limits are optional. `0` disables a retained asset-count or total-byte stop, but the ledger still records decoded bodies and rejects a mismatched `caseId`. Keep a nonzero per-resource guard. Retention limits do not replace an owner-defined request, traffic, or time ceiling.
+## Modes
 
-## Cache Decision
+- `full-catalog` requires `allowAutosave: true` and `allowCreateCapturePages: true`. Pages are named `CDP Capture 001`, `CDP Capture 002`, and so on.
+- `single-page` requires `allowAutosave: true` and `allowCreateCapturePages: false`. At capacity, record `blocked-page-capacity` and stop.
+- Omitted automation is passive mode. An automation object must use an explicit boolean `enabled`.
 
-- On Chrome 144+, use Chrome DevTools MCP `--autoConnect` with explicit approval at `chrome://inspect/#remote-debugging`. Select only the unique page matching `pageHosts`. The MCP can see all windows in the selected profile, so close unrelated sensitive pages when practical and never persist their metadata.
-- Accept body-unavailable gaps created by discovery or normal browser caching; record the gap and do not refetch.
-- If prerequisites are unavailable, pause. Do not transfer cookies, tokens, passwords, or profile files or request another browser session.
-- Always: never clear cache, disable cache, bypass the Service Worker, or replay a resource URL.
+`maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix.
+
+## Synthetic fixtures
+
+`fixtureProfiles` names existing visible synthetic test options. `widgetFixtureMap` may reference only those names. Never choose the first available option, add a real-data fallback, or create/modify/delete any data source.
+
+For `data-bound`:
+
+- no data-source capability: `not-applicable`, `required: false`;
+- optional and no mapping: `not-requested`, `required: false`;
+- required and no mapping: `blocked-missing-fixture`, partial coverage;
+- mapping present: select the exact `visibleOption`, save through approved autosave, return to viewport, and capture the rendered state.
+
+Provenance retains only policy fields, Profile names, and mapped widget keys—not visible option text or data.
+
+## Exact hosts
+
+Start discovery with `pageHosts`. List all current request metadata, then present exact asset/network candidates in the single consolidated authorization. Do not use allow-any or broad wildcard approval. Any later unknown host stops the run and requires a new authorization boundary.
+
+Document HTML additionally requires its response hostname to appear as an exact non-wildcard approved host.
+
+## Limits and Ledger
+
+Reuse one append-only Ledger across all runs. `0` disables retained asset-count or total-byte limits but does not disable owner traffic/time ceilings. Keep a nonzero `maxAssetMiB` guard. A Ledger `caseId` mismatch is fatal.
 
 ## Outputs
 
-- `observed-network-hosts.json`: all discovered network hosts
-- `observed-hosts.json`: discovered static-resource hosts
-- `scope-candidates.json`: exact unapproved asset and network-only candidates
-- `task-ledger.ndjson`: cumulative retained-body usage
-- `manifest.ndjson`: accepted assets and hashes
-- `invalid-assets.ndjson`: rejected bodies and budget events
-- `risk-events.ndjson`: status, target, and scope failures
-- `asset-audit.json`: offline integrity results
-- `merge-summary.json`: deduplicated delivery summary from `merge-captures.mjs`
-- `summary.json`: run counters and detected Workshop Build IDs
+- Per run: `manifest.ndjson`, `component-events.ndjson`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`.
+- Resume state: `catalog-state.json` contains only canonical keys/counters; `network-state.json` contains only request ID/status fingerprints/counters.
+- Delivery: `metadata/manifest.ndjson`, `metadata/source-manifest.ndjson`, `metadata/component-events.ndjson`, `metadata/merge-summary.json`, `component-assets.json`, and `assets/`.

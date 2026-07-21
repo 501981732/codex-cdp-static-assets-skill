@@ -1,12 +1,12 @@
-# Codex CDP 静态资源采集 Skill
+# Codex CDP Workshop Widget 自动资源采集 Skill
 
 [English](README.en.md)
 
-这是一个授权优先、仅监听的 Codex Skill。它保存可见 Chrome 在正常页面操作中已经自然加载完成的 JS、CSS、WASM、字体和可选图片，并生成脱敏清单、哈希、Ledger 和审计报告。
+这个 Skill 用一次汇总授权，自动遍历授权 Workshop 中当前账号可见的 Widget，通过真实可见 UI 添加组件、滚动进可视区、打开配置、绑定获批合成数据并进入预览，再从 Chrome 已完成的 Network 记录中保存自然加载的 JS、CSS、WASM、字体、图片和严格限定的 Document HTML。
 
-你负责登录、刷新、添加组件和预览；Codex 只检查当前页面的 Network 记录和已完成响应正文。它不会自动点击、枚举 Chunk、扫描 sourcemap、重放 URL、清缓存、绕 Service Worker，也不会复制 Cookie 或登录凭证。
+它不重新请求资源 URL，不执行页面脚本，不复制登录凭证，也不把“首次观察到”误报为组件源码所有权。
 
-## 安装 Skill
+## 安装
 
 ```bash
 npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
@@ -16,13 +16,11 @@ npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
   --yes
 ```
 
-安装或更新后，新建一个 Codex 任务再调用 `$codex-cdp-static-assets-skill`。
+安装或更新后，新建 Codex 任务并调用 `$codex-cdp-static-assets-skill`。
 
-## 默认 Chrome 登录态
+## Chrome 前置条件
 
-目标账号使用日常默认 Chrome 的登录态，通过 Chrome 144+ 官方 `autoConnect` 连接。
-
-一次性配置：
+使用已登录的日常默认 Chrome，要求 Chrome 144+：
 
 ```bash
 codex mcp remove chrome-devtools
@@ -33,97 +31,73 @@ codex mcp add chrome-devtools -- \
   --no-performance-crux
 ```
 
-重启 Codex。然后在已经登录的默认 Chrome 中：
+重启 Codex，在 Chrome 打开 `chrome://inspect/#remote-debugging` 并启用 Remote debugging，再打开授权 Workshop 页面。Codex 连接时只需批准一次 Chrome 弹窗。
 
-1. 打开 `chrome://inspect/#remote-debugging`。
-2. 开启 Remote debugging。
-3. 打开授权目标页面。
-4. Codex 发起连接时，在 Chrome 弹窗中点击允许。
+`autoConnect` 能枚举默认 Profile 的窗口。建议关闭无关敏感页面；Skill 只选择唯一匹配精确授权主机的页面，不留存其他标签页信息。Chrome 版本、MCP 工具或企业策略不满足时，流程暂停，不复制 Profile/Cookie/Token，也不另开登录会话。
 
-`autoConnect` 可以看到该默认 Profile 的全部窗口。建议暂时关闭无关敏感页面；Skill 只选择唯一匹配授权域名的页面，不保存其他标签页的信息。
+## 开始方式
 
-Chrome 低于 144、MCP 工具不可用或企业策略禁止连接时，Skill 会直接暂停并报告缺少的条件。它不会启动或要求另一个浏览器会话，也不会复制 Profile、Cookie、Token 或密码来绕过登录限制。
-
-## 30 秒开始
-
-在新 Codex 任务中发送：
+在新任务中发送：
 
 ```text
-使用 $codex-cdp-static-assets-skill 对下面的授权页面做一次仅监听、低侵入的静态资源采集。
+使用 $codex-cdp-static-assets-skill 自动采集这个 Workshop Module 的全部可见 Widget 资源：
+https://workshop.example.com/module/edit/...
 
-页面：https://workshop.example.com/...
 Case ID：SEC-2026-001
-使用当前默认 Chrome 的登录态和 autoConnect，由我操作可见页面。
-我不知道 CDN，请先发现精确主机，不要自动批准。
-授权允许编辑专用测试 Module 及自动保存，但不允许发布、Action、Workflow、导出、改权限或生产回写。
-每一步等我确认。
+允许在专用测试 Module 中新增 CDP Capture 页面、添加 Widget、修改 Widget 配置并自动保存。
+只允许使用我批准的现有合成测试数据源；禁止创建、修改或删除数据源。
+先做只含元数据的主机和 Widget 入口发现，把精确主机、动作、上限和 Fixture 映射一次性列给我授权；授权后全自动执行。
+采集 js、css、wasm、font、image，以及自然加载的顶层/Widget iframe Document HTML。
 ```
 
-## 最简单流程
+## 自动化流程
 
-你通常只需要依次回复：
+授权前只做 `list_pages`、精确页 `select_page`、`take_snapshot` 和 `list_network_requests` 元数据发现。Codex 随后给出 **single consolidated authorization**：精确主机、页面/自动保存权限、组件页上限、五个状态、流量限制和合成 Fixture 映射。
 
-```text
-已登录并打开空白 Workshop
-发现刷新完成
-批准全部候选
-严格基线完成
-P1 完成
-P2 完成
-全部完成
-```
+授权一次后，Codex 自动执行：
 
-### 1. 发现主机
+1. 采集 `baseline`；预加载资源归为 `baseline/shared`，不会阻止全目录遍历。
+2. 打开 Add Widget，滚动到底；连续两次无新规范 Key 后确认目录完成。
+3. 每页放 5–10 个组件，确定性创建 `CDP Capture 001`、`CDP Capture 002` 等页面。
+4. 对每个 Widget 覆盖 `editor-mounted`、`viewport-visible`、`config-opened`、`data-bound`、`preview-visible`。
+5. 每个状态都先检查全部主机/状态码，再等待三次相同的请求 ID/状态观察，随后按 request ID 读取已完成响应并立即入库。
+6. 每次状态写入可恢复事件；中断后定位唯一现有实例，只补缺失状态，不重复添加。
+7. 逐 run 审计，最终按 SHA-256/URL 合并并生成 `component-assets.json`。
 
-Codex 先通过 `list_pages` 选择唯一授权页面，再让你手动刷新和做一次代表性操作。完成后，Codex 只用 `list_network_requests` 查看当前页面自然产生的请求，不读取正文。
+可视区步骤是必需的：Workshop 画布虚拟化或 `IntersectionObserver` 可能直到组件进入视口才渲染/加载。配置数据后还会再次滚回组件并等待渲染。
 
-你和授权方一次确认精确的静态资源主机和网络依赖主机。候选不会自动进入白名单，也不会使用宽泛 CDN 通配符。
+## 没有数据源也可以
 
-### 2. 严格基线
+- 组件没有数据源能力：`data-bound = not-applicable`，不影响完整度。
+- 数据源可选、Scope 没映射：`data-bound = not-requested`，保留无数据状态，不影响完整度。
+- 数据源必填、Scope 没有获批映射：`blocked-missing-fixture`，结果为部分覆盖。
+- Scope 有映射：只选择映射的现有合成数据源，保存配置后再次进入可视区采集。
 
-批准 Scope 后，你手动刷新空白 Workshop。Codex 先检查完整请求列表；如果出现未知主机、`401`、`403`、`429`、连续 `5xx` 或账号异常，就在读取正文前停止。
+Skill 不会随便选择第一个数据源，不会回退到真实业务数据，也不会创建、修改或删除数据源。
 
-对已批准且加载完成的静态资源，Codex 使用 `get_network_request` 将响应正文写入临时文件，再由本地脚本校验类型、大小、白名单和 SHA-256。它不会再次请求资源 URL。正文不可用时只记 `body-unavailable`，不补请求。
+## HTML 范围
 
-### 3. 判断是否按需加载
+HTML 只在以下条件全部成立时保留：资源类型是 `Document`，MIME 是 `text/html` 或 `application/xhtml+xml`，精确响应主机已授权，请求是无正文的 `GET`，状态为 200–399，且上下文是获批顶层页或 Widget iframe。
 
-- **已预加载**：基线已有大量 widget/component/plugin 包，停止批量添加，直接离线整理。
-- **按需加载**：基线主要是页面外壳，再按 P1、P2 分批添加组件。
+XHR、fetch、GraphQL/API HTML 一律排除；JS/CSS 返回 HTML 仍记为无效正文。正文缺失记录 `body-unavailable`，绝不补请求。
 
-每批约 5-10 个相关组件。一个批次尽量保持在同一次页面导航中，并在跳转前回复“P1 完成”，让 Codex及时入库该批 Network 记录。默认每批一个 Marker。
+## 安全边界
 
-### 4. 审计和合并
+允许的可见自动化工具包括 `take_snapshot`、`click`、`drag`、`fill`、`press_key` 和等待；只作用于获批 Module。Never use `evaluate_script`. Never set `requestFilePath`; 只允许把响应正文暂存到运行时 `os.tmpdir()` 下的 `responseFilePath`。
 
-Codex 每轮审计无效正文、风险事件和 Ledger。全部完成后按 SHA-256 合并去重，再审计最终目录。
+出现 unknown host、`401`、`403`、`429`、连续 `5xx`、CAPTCHA/MFA、掉线、账号警告、页面/Module 漂移、未授权写操作、组件添加/恢复歧义、流量/时间上限或负责人停止指令时，立即停止。
 
-## 立即停止
+禁止发布、Action/Workflow、导出、权限变更、生产回写、隐藏路由、Chunk 枚举、sourcemap 探测、清缓存、绕 Service Worker、请求拦截和凭证提取。
 
-遇到以下任一情况都停止且不自动重试：
+## 结果
 
-- `401`、`403`、`429` 或连续 `5xx`；
-- CAPTCHA、MFA、掉线、账号警告；
-- 未批准主机或意外写操作；
-- 达到授权方的请求量、流量或时间上限；
-- 授权方或 SOC 要求停止。
+每个 run 保存内容寻址资源、脱敏 Manifest、`component-events.ndjson`、风险/无效事件和摘要。合并结果包含：
 
-## 输出
+- `assets/`：按交付 URL 路径保存的去重资源；
+- `metadata/manifest.ndjson`：SHA-256、URL、类型、Marker 和来源 run；
+- `metadata/source-manifest.ndjson`：带 `sourceRun` 的原始观察事件；
+- `metadata/component-events.ndjson`：全部状态尝试；
+- `component-assets.json`：baseline、每个 Widget 的状态覆盖、首次观察资源、正文缺失和历史失败；
+- `metadata/asset-audit.json`、`metadata/merge-summary.json`：完整性和覆盖摘要。
 
-- `assets/`：按 SHA-256 保存的 JS、CSS、WASM、字体和可选图片；
-- `manifest.ndjson`：脱敏 URL、哈希、大小、类型和 Marker；
-- `task-ledger.ndjson`：跨批次累计记录；
-- `risk-events.ndjson`、`invalid-assets.ndjson`、`asset-audit.json`；
-- `merge-summary.json`：最终去重结果。
-
-结果是浏览器实际观察到的部署产物，不是原始源码，也不包含未触发分支、后端代码或未经授权的角色资源。
-
-## 验证
-
-```bash
-node --test skills/codex-cdp-static-assets-skill/scripts/*.test.mjs
-python3 /path/to/skill-creator/scripts/quick_validate.py \
-  skills/codex-cdp-static-assets-skill
-```
-
-## 许可证
-
-[MIT](LICENSE)
+`firstObservedAssets` 会排除 baseline，并把同一 `(sha256, URL)` 只分配给最早的非 baseline Widget Marker。它表示观察时序，不代表独占归属。

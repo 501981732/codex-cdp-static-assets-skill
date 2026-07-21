@@ -1,15 +1,13 @@
 # Default Chrome autoConnect
 
-Use this backend when login works only in the user's normal Chrome profile.
-
 ## Requirements
 
 - Google Chrome 144 or later
 - Node.js LTS
-- Chrome DevTools MCP network tools available to Codex
-- Explicit operator approval in Chrome
+- Chrome DevTools MCP with browser snapshot, visible input, and Network tools
+- Explicit Chrome connection approval
 
-Install or replace the MCP server:
+Configure only when the MCP is missing:
 
 ```bash
 codex mcp remove chrome-devtools
@@ -20,81 +18,84 @@ codex mcp add chrome-devtools -- \
   --no-performance-crux
 ```
 
-Restart Codex after changing MCP configuration. Do not run this command when the required MCP tools are already available.
+Restart Codex after configuration. In the already signed-in default Chrome, open `chrome://inspect/#remote-debugging`, enable remote debugging, keep the approved Workshop page open, and approve Chrome's connection dialog when Codex connects.
 
-In the already signed-in default Chrome:
+MCP may enumerate every window in that profile. Close unrelated sensitive pages where practical. Codex selects only the unique page whose hostname matches `pageHosts`, does not inspect other page contents, and never persists their metadata.
 
-1. Open `chrome://inspect/#remote-debugging`.
-2. Enable remote debugging.
-3. Keep the approved target page open.
-4. Approve the Chrome connection dialog only when Codex initiates the MCP connection.
+If Chrome is too old, required tools are missing, or enterprise policy blocks access, pause. Do not launch a replacement profile, copy credentials, or work around login controls.
 
-Chrome DevTools MCP can access every open window in the selected default profile. Close unrelated sensitive pages when practical. Codex must select only the unique page whose hostname matches `pageHosts`, must not inspect other page contents, and must not persist their URLs.
+## Metadata discovery
 
-## Discovery
+Before the single consolidated authorization:
 
-1. Use `list_pages`, then `select_page` for the unique approved target. Selection is not navigation.
-2. Ask the operator to refresh and perform the approved representative UI actions.
-3. Call `list_network_requests` for the selected page. Use `includePreservedRequests: true` only when the approved flow crossed a navigation; it preserves at most the recent navigation history exposed by the tool.
-4. Review all observed request hosts and statuses before reading any response body.
-5. Record exact static hosts as candidate `assetHosts` and API/telemetry dependencies as candidate `approvedNetworkHosts`. Discovery does not call `get_network_request`.
+1. `list_pages` and `select_page` the exact target.
+2. `take_snapshot` only to verify the approved Module and visible automation entry points.
+3. `list_network_requests` to collect exact host/status/resource metadata without response bodies.
+4. Present all exact host candidates and intended visible actions for approval.
 
-Never infer approval from a CDN name. Obtain one batch approval for exact candidates.
+Do not infer trust from a CDN suffix. Discovery candidates remain unapproved until the user accepts the Scope.
 
-## Strict capture
+## Visible automation after approval
 
-Attach before the operator refreshes or adds components. At each checkpoint:
+Use snapshots before and after each visible action. `click`, `drag`, `fill`, `press_key`, and `wait_for` may operate only the authorized Module and state matrix. Exact-page reload may use `navigate_page` reload; do not navigate to a newly constructed resource URL.
 
-First resolve the only permitted staging root from the runtime rather than assuming `/tmp` or a workspace directory:
+Never use page-script evaluation. Accessibility snapshots are transient inputs, not output artifacts. Store only canonical widget keys and minimal progress counters.
+
+## Network stabilization
+
+`list_network_requests` is a snapshot, not a callback. At every widget state:
+
+1. Inspect the complete list for unknown hosts and stop statuses before any body read.
+2. Compare only request IDs and statuses.
+3. Treat the first observation as baseline and require two more identical observations.
+4. Any new request or status change resets the unchanged counter.
+
+Example:
+
+```bash
+node scripts/automation-policy.mjs network-update \
+  --state ./capture-run-1/network-state.json \
+  --requests-json '[{"requestId":"1","status":200}]'
+```
+
+## Response staging
+
+Resolve the staging root instead of assuming `/tmp`:
 
 ```bash
 node -p 'require("node:os").tmpdir()'
 ```
 
-1. Call `list_network_requests` for all resource types to check hosts and stop statuses.
-2. Stop before body reads if the page left `pageHosts`, an unknown host appeared, or a stop condition is present.
-3. Filter the same observed list to completed `script`, `stylesheet`, `font`, and approved WASM/image candidates.
-4. Before the bulk pass, use one small approved 200 JS/CSS response as a canary. Call `get_network_request` with only `reqid` and an absolute `responseFilePath` under the resolved `os.tmpdir()` staging directory. Continue only when the returned object has `isError !== true`, the saved file is non-empty, and the importer successfully hashes and deletes it.
-5. Use the same staging directory for each remaining approved request ID. Never set `requestFilePath`.
-6. Inspect the returned MCP object, not just thrown exceptions. If `isError === true` describes a local path/save/tool failure, fix staging and retry the same request ID; this is local inspection and creates no network request. If Chrome reports the response body itself is unavailable, record `body-unavailable`; do not reload or replay the URL.
-7. Import a saved response immediately, then delete the staging body:
+Use one small approved 200 JS/CSS response as a canary. Call `get_network_request` with only `reqid` and an absolute `responseFilePath` under that staging root. Continue only when the MCP result is not an error, the file is non-empty, and local import/hash/delete succeeds.
+
+Import a static response:
 
 ```bash
 node scripts/import-mcp-response.mjs \
   --scope ./capture-scope.json \
   --output ./capture-run-1 \
   --ledger ./task-ledger.ndjson \
-  --staging-root '/actual/value/from/node-os-tmpdir' \
-  --body '/actual/value/from/node-os-tmpdir/cdp-static-assets/REQ.network-response' \
+  --staging-root '/actual/os/tmpdir/cdp-static-assets' \
+  --body '/actual/os/tmpdir/cdp-static-assets/REQ.network-response' \
   --url 'https://approved.example/chunk.js?build=123' \
   --status 200 \
   --resource-type script \
   --mime-type application/javascript \
   --request-id REQ \
-  --marker P1:charts \
+  --marker widget:object-table:a1b2c3d4:editor-mounted \
   --delete-body
 ```
 
-Pass the observed URL only to the local importer. Its stored manifest redacts every query value and removes fragments. Shell-quote the URL. Do not save request headers or request bodies.
+For approved document HTML, also pass:
 
-To record an unavailable body, omit `--body` and `--delete-body` while keeping the other metadata.
-
-The importer refuses to delete a body outside `--staging-root`, and a requested cleanup failure is fatal. Inspect only the target MCP configuration section when diagnosing connection setup; never print whole configuration or environment files that may contain unrelated secrets.
-
-## Behavioral limits
-
-- `list_network_requests` is a snapshot of the selected page's local Network record, not a continuous event callback.
-- Ingest a batch before navigating away; do not rely on old entries remaining indefinitely.
-- Reading a completed response body through MCP is local browser inspection and should not issue another server request.
-- Body reads can still fail because of cache eviction, renderer lifecycle, opaque responses, or tool limits. Record the gap.
-- Default-profile access lets the MCP enumerate all windows in that profile. Minimize open sensitive pages and keep target selection exact.
-
-After each run:
-
-```bash
-node scripts/audit-capture.mjs ./capture-run-1
+```text
+--request-method GET --request-has-body false --document-context top-level
 ```
 
-Merge only after all approved batches are complete.
+Use `widget-iframe` only when the visible response belongs to an approved widget iframe. Missing HTML metadata is ignored. XHR/fetch HTML is never imported.
 
-The merged delivery is organized as `assets/<exact-host>/<original-url-path>`. SHA-256 remains in `metadata/manifest.ndjson`; it is not used to create a second set of hash-named files.
+If Chrome cannot provide a body, omit `--body` and `--delete-body` to record `body-unavailable`. Do not reload, replay, or retrieve the URL elsewhere. A local file-path failure may retry the same request ID only after fixing the staging path because that does not create network traffic.
+
+## Privacy and cache semantics
+
+Preserve normal cache and Service Worker behavior. Never clear cache, disable cache, bypass Service Workers, save request headers/bodies, or transfer the browser profile. Redact query values/fragments through the importer. Ingest each state before navigation because older Network records may disappear.
