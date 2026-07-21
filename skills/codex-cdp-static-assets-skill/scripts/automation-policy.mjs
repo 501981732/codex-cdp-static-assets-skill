@@ -221,7 +221,17 @@ async function readJson(path, fallback) {
 
 export async function runAutomationPolicyCli(argv) {
   const { command, options } = parseArgs(argv);
-  if (command === 'validate-scope') return normalizeAutomationPolicy(JSON.parse(await readFile(resolve(options.scope), 'utf8')));
+  if (command === 'validate-scope') {
+    const { normalizeScope } = await import('./capture-core.mjs');
+    const scope = normalizeScope(JSON.parse(await readFile(resolve(options.scope), 'utf8')));
+    return {
+      valid: true,
+      caseId: scope.caseId,
+      automationEnabled: scope.automation.enabled,
+      mode: scope.automation.mode || null,
+      moduleId: scope.authorization?.moduleId || null,
+    };
+  }
   if (command === 'marker') return markerForWidget(options['widget-key'], options.state);
   if (command === 'catalog-update') {
     const statePath = resolve(options.state);

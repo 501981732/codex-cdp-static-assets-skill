@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -150,4 +150,30 @@ test('catalog-update CLI stops on indistinguishable same-snapshot widgets', asyn
     ]),
     '--at-bottom', 'false',
   ]), /catalog-identity-ambiguity/);
+});
+
+test('validate-scope CLI enforces the exact Module authorization context', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'automation-policy-scope-'));
+  const scopePath = join(root, 'scope.json');
+  const scope = {
+    caseId: 'SEC-1',
+    pageHosts: ['workshop.example.com'],
+    approvedPageUrl: 'https://workshop.example.com/module/edit/module-1',
+    moduleId: 'module-1',
+    testAccount: 'synthetic-tester',
+    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' },
+    stopContact: 'workshop-owner',
+    automation: validInput({ automation: { mode: 'single-page', allowCreateCapturePages: false } }).automation,
+  };
+  await writeFile(scopePath, JSON.stringify(scope));
+  assert.deepEqual(await runAutomationPolicyCli(['validate-scope', '--scope', scopePath]), {
+    valid: true,
+    caseId: 'SEC-1',
+    automationEnabled: true,
+    mode: 'single-page',
+    moduleId: 'module-1',
+  });
+  delete scope.moduleId;
+  await writeFile(scopePath, JSON.stringify(scope));
+  await assert.rejects(runAutomationPolicyCli(['validate-scope', '--scope', scopePath]), /moduleId/);
 });
