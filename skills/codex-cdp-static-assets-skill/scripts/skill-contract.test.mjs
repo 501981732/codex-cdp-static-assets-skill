@@ -65,6 +65,7 @@ test('skill defines one-authorization automated widget capture with explicit bou
     assert.equal(allowedOperations.includes(prohibitedTool), false, `prohibited tool appears in allowed operations: ${prohibitedTool}`);
   }
 
-  assert.equal(readme.includes('P1 完成'), false, 'normal flow still requires per-widget P1 confirmation');
-  assert.equal(readme.includes('P2 完成'), false, 'normal flow still requires per-widget P2 confirmation');
+  for (const checkpoint of ['P1 完成', 'P2 完成', 'P1 complete', 'P2 complete']) {
+    assert.equal(combined.toLowerCase().includes(checkpoint.toLowerCase()), false, `normal flow still requires per-widget confirmation: ${checkpoint}`);
+  }
 });
