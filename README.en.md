@@ -1,10 +1,20 @@
-# Codex CDP Workshop Widget Asset Automation Skill
+# Workshop Widget Asset Capture Skill
 
 [中文](README.md)
 
-This Skill uses one consolidated authorization to enumerate every visible Widget in an approved Workshop, add widgets through real visible UI, open configuration only when needed, use compatible variables already defined in the current Module, enter preview, and save naturally loaded JS, CSS, WASM, images, and strictly approved Document HTML from Chrome's completed Network record.
+This Skill uses real Chrome interactions to add visible Widgets from a Workshop Module to test pages, configure them when needed, enter preview, and organize the frontend resources that the browser **naturally loads**.
 
-It never retrieves a resource URL again, executes page-context scripts, transfers login credentials, or treats first observation as proof of source ownership.
+It is useful for Widget reverse engineering, asset inventory, and lazy-load analysis. It does not guess URLs or download resources again: it only retains content Chrome already received while performing the approved UI work.
+
+## What it does
+
+- Finds the Widgets visible to the current account.
+- Creates capture pages and adds Widgets in batches (the Scope controls the per-page limit, such as eight).
+- Covers three useful moments: mounted in the editor, bound to existing data when supported, and visible in preview.
+- Retains JS, CSS, WASM, images, and eligible page HTML. Fonts are excluded by default.
+- Separates shared resources from resources first observed while operating a Widget, making later analysis easier.
+
+It is not for collecting API data, bypassing login, exporting production data, or proving that a Chunk exclusively belongs to a Widget.
 
 ## Install
 
@@ -16,79 +26,67 @@ npx skills add https://github.com/501981732/codex-cdp-static-assets-skill \
   --yes
 ```
 
-Start a new Codex task after installation or update and invoke `$codex-cdp-static-assets-skill`.
+After installing or updating, start a new Codex task and invoke `$codex-cdp-static-assets-skill`.
 
-## Chrome prerequisite
+## Before you start
 
-Reuse the signed-in default Chrome profile with Chrome 144+:
+1. Use your normal signed-in Chrome (Chrome 144 or newer).
+2. Configure the Chrome connection:
 
-```bash
-codex mcp remove chrome-devtools
-codex mcp add chrome-devtools -- \
-  npx -y chrome-devtools-mcp@latest \
-  --autoConnect \
-  --no-usage-statistics \
-  --no-performance-crux
-```
+   ```bash
+   codex mcp remove chrome-devtools
+   codex mcp add chrome-devtools -- \
+     npx -y chrome-devtools-mcp@latest \
+     --autoConnect \
+     --no-usage-statistics \
+     --no-performance-crux
+   ```
 
-Restart Codex, enable remote debugging at `chrome://inspect/#remote-debugging`, and keep the approved Workshop open. Approve Chrome's connection dialog when Codex connects.
+3. Restart Codex. Open `chrome://inspect/#remote-debugging` in Chrome, enable Remote debugging, then open the Workshop page to capture.
+4. Prefer a dedicated test Module. Capture creates pages, adds Widgets, changes Widget configuration, and autosaves.
 
-Because `autoConnect` can enumerate the profile's windows, close unrelated sensitive pages where practical. The Skill selects only the unique exact authorized host and never persists other tab metadata. It pauses rather than copying profiles/cookies/tokens or opening a replacement login session when prerequisites are unavailable.
+For data-required Widgets such as Object Table, you can first create a test variable in the Module yourself. The Skill only uses an existing variable that the Widget UI explicitly marks compatible; it never creates, changes, or deletes variables or data sources.
 
-## Quick start
+## Ask Codex like this
+
+Replace the URL and Case ID, then send this in a Codex task:
 
 ```text
-Use $codex-cdp-static-assets-skill to automatically capture every visible Widget resource from:
+Use $codex-cdp-static-assets-skill to capture resources for every visible Widget in this Workshop Module:
 https://workshop.example.com/module/edit/...
 
 Case ID: SEC-2026-001
-Allow deterministic CDP Capture pages, Widget addition/configuration, and autosave in this dedicated test Module.
-Allow variables already defined in this Module when the Widget's visible typed selector marks them compatible; never create, modify, or delete variables or data sources.
-First perform metadata-only host and entry-point discovery. Present exact hosts, actions, limits, and the data-source policy for one approval; then run automatically.
-Capture js, css, wasm, image, and naturally loaded top-level/Widget-iframe Document HTML. Fonts are excluded by default.
+This is a dedicated test Module. Allow creation of CDP Capture pages, Widget addition/configuration, and autosave.
+Allow existing Module variables only when the Widget UI explicitly marks them compatible. Do not create, modify, or delete variables or data sources.
+First discover only the host and Widget entry points, then summarize the intended actions, Widget limit per page, and data-source policy for one approval. Run automatically after that approval.
+Capture js, css, wasm, image, and naturally loaded page or Widget-iframe HTML. Exclude fonts by default.
 ```
 
-## Workflow
+## What happens during capture
 
-Before approval, only `list_pages`, exact-page `select_page`, `take_snapshot`, and `list_network_requests` metadata discovery are used. Codex then presents the exact hosts, actions, limits, the three-state matrix, and existing Module variable policy as a **single consolidated authorization**.
+1. It records resources already loaded when the page opens (`baseline`).
+2. It opens Add Widget, scrolls to the bottom, and confirms the catalog is complete.
+3. It adds Widgets in batches. Each Widget is mounted in the editor, optionally bound to an existing test variable, then opened in preview.
+4. After each action, it reads only new, completed responses from Chrome Network; URLs are never replayed.
+5. If interrupted, it resumes by locating existing Widgets and filling only missing states.
 
-After approval it automatically:
+Catalog icons and preview images are recorded as shared `baseline:catalog` resources, rather than being attributed to an individual Widget.
 
-1. Captures `baseline`; preloaded assets remain `baseline/shared` and do not stop catalog traversal.
-2. Opens Add Widget and scrolls to the bottom until two consecutive observations reveal no new canonical key.
-3. Places Widgets up to the Scope limit per deterministic `CDP Capture 001`, `CDP Capture 002`, etc.; an eight-Widget page is supported.
-4. Captures Catalog previews/icons as shared `baseline:catalog` evidence before covering `editor-mounted`, applicable `data-bound`, and `preview-visible` per Widget.
-5. Checks hosts/statuses after baseline, Catalog, Widget addition, successful data binding, or preview entry. It waits for three identical request ID/status observations only when that action changed the request set.
-6. Records resumable attempts and only fills missing states after interruption.
-7. Exports the Widget registry from retained baseline JS, audits each run, merges by SHA-256/URL, and creates a separate baseline plus per-Widget reverse-engineering views.
+## What you receive
 
-Viewport visibility is an execution guard rather than a separate coverage state because canvas virtualization or IntersectionObserver rendering can delay natural loads until a Widget is visible. Preview remains separate because it can load a distinct runtime bundle.
+- `assets/`: deduplicated retained resource files.
+- `metadata/component-assets.json`: Widget states, asset-retention results, and first-observed resources.
+- `metadata/components/`: a reverse-engineering view for each interacted Widget, such as Input or Table.
+- `metadata/widget-inventory.json`: Widget, Renderer, Chunk, and module IDs parsed from baseline JavaScript.
+- `metadata/baseline-assets.json`: resources shared by page startup and the Widget catalog.
+- `metadata/manifest.ndjson`: an index of resource URL, type, hash, and observation point.
 
-## Existing Module variables
+`firstObservedAssets` means “first seen after operating this Widget,” not “owned only by this Widget.” If a resource came from cache or Chrome did not retain its body, the report marks that clearly and never fetches it again.
 
-- No data-source capability: `data-bound = not-applicable`; completeness is unaffected.
-- With `allowExistingModuleVariables: true`, prefer a manually prepared and exactly mapped test variable; otherwise keep a compatible current selection or use the first enabled compatible variable exposed by the Widget's visible typed selector.
-- An exact fixture mapping overrides automatic selection for that Widget.
-- With no compatible variable, an optional source is `not-requested`; a required source is `blocked-missing-fixture`. Both continue with remaining states and Widgets.
+## Important boundaries
 
-The workflow never inspects hidden candidates, creates/modifies/deletes variables or data sources, or persists variable names or rendered data.
+- The Skill operates only on the exact authorized Workshop host and Module. It stops on login expiry, CAPTCHA, an unknown host, or an unexpected write.
+- HTML is retained only for naturally loaded Document pages or Widget iframes—not XHR, fetch, GraphQL, or API responses.
+- It does not execute page scripts, read cookies/tokens, probe hidden routes, sourcemaps, or Chunks, clear caches, or bypass Service Workers.
 
-## HTML boundary
-
-HTML is retained only for `Document` plus `text/html` or `application/xhtml+xml`, an exact approved response host, a completed bodyless `GET`, status 200–399, and an approved `top-level` or `widget-iframe` context.
-
-XHR/fetch/GraphQL/API HTML is excluded. HTML masquerading as JavaScript or CSS is invalid. Missing Chrome bodies are `body-unavailable` and are never refetched.
-
-## Safety boundary
-
-Visible automation may use `take_snapshot`, `click`, `drag`, `fill`, `press_key`, and waiting on the approved Module. Never use `evaluate_script`. Never set `requestFilePath`; response staging may use only `responseFilePath` below runtime `os.tmpdir()`.
-
-Stop on an unknown host, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, page/Module drift, unexpected write, ambiguous add/resume result, owner limits, or owner/SOC instruction.
-
-Publishing, actions/workflows, export, permission changes, production writes, hidden routes, chunk enumeration, sourcemap probing, cache changes, Service Worker bypass, interception, and credential extraction are prohibited.
-
-## Output
-
-Runs contain content-addressed assets, a baseline-derived Widget inventory, redacted manifests, component attempts, optional authorized element screenshots, risks/invalid bodies, and summaries. The merged delivery keeps globally deduplicated `assets/`, `metadata/widget-inventory.json`, the aggregate `metadata/component-assets.json` with separate `assetCoverageStatus` and `behaviorCoverageStatus`, shared evidence in `metadata/baseline-assets.json`, one reverse-engineering view per interacted Widget in `metadata/components/`, and optional screenshots under `evidence/`. The merged inventory adds `retainedEvidence` so declared Chunk/module IDs can be distinguished from implementation bodies actually retained in the delivery.
-
-`firstObservedAssets` excludes `baseline` and `baseline:catalog`, and assigns each `(sha256, URL)` to only the earliest non-shared Widget marker. It is timing evidence, not exclusive ownership; a missing fixture does not downgrade retained implementation bodies.
+For state coverage, page limits, screenshots, and variable mappings, see the [Scope configuration](skills/codex-cdp-static-assets-skill/references/scope-config.md). Full execution and safety rules are in the [Skill guide](skills/codex-cdp-static-assets-skill/SKILL.md).
