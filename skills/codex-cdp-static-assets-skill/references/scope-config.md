@@ -20,7 +20,7 @@ Record the case ID, exact page host/Module, test account, time and traffic ceili
   "stopContact": "workshop-owner",
   "assetHosts": ["cdn.workshop.example.com"],
   "approvedNetworkHosts": ["api.workshop.example.com"],
-  "types": ["js", "css", "wasm", "font", "image", "html"],
+  "types": ["js", "css", "wasm", "image", "html"],
   "limits": {
     "maxAssets": 0,
     "maxTotalMiB": 0,
@@ -33,12 +33,10 @@ Record the case ID, exact page host/Module, test account, time and traffic ceili
     "allowAutosave": true,
     "allowCreateCapturePages": true,
     "allowExistingModuleVariables": true,
-    "captureStateScreenshots": true,
+    "captureStateScreenshots": false,
     "maxWidgetsPerPage": 8,
     "states": [
       "editor-mounted",
-      "viewport-visible",
-      "config-opened",
       "data-bound",
       "preview-visible"
     ]
@@ -65,14 +63,14 @@ node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
 
 - `full-catalog` requires `allowAutosave: true` and `allowCreateCapturePages: true`. Pages are named `CDP Capture 001`, `CDP Capture 002`, and so on.
 - `single-page` requires `allowAutosave: true` and `allowCreateCapturePages: false`. At capacity, record `blocked-page-capacity` and stop.
-- `captureStateScreenshots: true` authorizes element-level PNG evidence for successful visible states. Omit it or set it to `false` to retain no screenshots.
+- `captureStateScreenshots: true` authorizes one element-level PNG evidence item per successful state. Omit it or set it to `false` by default.
 - Omitted automation is passive mode. An automation object must use an explicit boolean `enabled`.
 
 `maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix. Automated Scope also requires a non-empty Case ID, an exact query-free `approvedPageUrl` whose final path segment equals `moduleId`, plus test account, a currently active increasing authorization window, and stop contact. Expired or not-yet-active Scope is rejected. These fields let the runner stop on same-host Module drift; account/contact values are never copied into provenance.
 
 ## Existing Module variables and fixture overrides
 
-`allowExistingModuleVariables: true` authorizes selecting variables already defined in the approved Module. Keep the current selection when the Widget's visible typed selector accepts it; otherwise choose the first enabled compatible option presented by that selector. Never inspect hidden candidates or create, modify, or delete variables or data sources.
+`allowExistingModuleVariables: true` authorizes selecting variables already defined in the approved Module. For a deterministic full-catalog run, manually pre-create a small, non-production Object Set variable before authorization and map affected Widgets to its exact visible option. Keep the current selection when the Widget's visible typed selector accepts it; otherwise choose the first enabled compatible option presented by that selector. Never inspect hidden candidates or create, modify, or delete variables or data sources.
 
 `fixtureProfiles` names exact visible test options and `widgetFixtureMap` may reference only those names. A mapped fixture overrides automatic existing-variable selection for that Widget.
 
@@ -84,7 +82,7 @@ For `data-bound`:
 - no compatible variable for an optional source: `not-requested`, `required: false`;
 - no compatible variable for a required source: `blocked-missing-fixture`, partial coverage, then continue the remaining states and Widgets.
 
-After a successful selection, save through approved autosave, return to the viewport, and capture the rendered state.
+After a successful selection, save through approved autosave, return to the Widget, and capture the rendered data state. A missing fixture affects behavior coverage only; it does not reduce implementation-body retention.
 
 Provenance retains only the existing-variable authorization boolean, Profile names, and mapped widget keys—not variable names, visible option text, or rendered data.
 
@@ -100,6 +98,6 @@ Reuse one append-only Ledger across all runs. `0` disables retained asset-count 
 
 ## Outputs
 
-- Per run: `manifest.ndjson`, baseline-derived `widget-inventory.json`, `component-events.ndjson`, optional `evidence/components/<marker-base>/<state>--<attempt-number>.png`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`.
+- Per run: `manifest.ndjson`, baseline-derived `widget-inventory.json`, `component-events.ndjson`, optional `evidence/components/<marker-base>/<state>--<attempt-number>.png`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`. Catalog preview/icon resources use the shared `baseline:catalog` marker.
 - Resume state: `catalog-state.json` contains only canonical keys/counters; `network-state.json` contains only request ID/status fingerprints/counters.
 - Delivery: aggregate metadata including `metadata/widget-inventory.json`, `metadata/baseline-assets.json`, one file per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated `assets/`.

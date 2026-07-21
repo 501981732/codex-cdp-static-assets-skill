@@ -66,7 +66,7 @@ test('normalizes the automation and synthetic fixture policy with the capture sc
       allowAutosave: true,
       allowCreateCapturePages: false,
       maxWidgetsPerPage: 5,
-      states: ['editor-mounted', 'viewport-visible', 'config-opened', 'data-bound', 'preview-visible'],
+      states: ['editor-mounted', 'data-bound', 'preview-visible'],
     },
     fixtureProfiles: { objects: { kind: 'synthetic-object-set', visibleOption: 'CDP Objects' } },
     widgetFixtureMap: { 'tables/object-table/v1': 'objects' },

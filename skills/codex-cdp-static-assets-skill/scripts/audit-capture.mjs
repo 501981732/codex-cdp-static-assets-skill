@@ -11,6 +11,11 @@ const COMPONENT_STATE_STATUSES = new Set([
   'captured', 'not-applicable', 'not-requested', 'failed', 'missing',
   'blocked-missing-fixture', 'blocked-page-capacity', 'blocked-existing-instance-ambiguous',
 ]);
+const ASSET_COVERAGE_STATUSES = new Set([
+  'implementation-body-retained',
+  'implementation-body-unavailable',
+  'implementation-body-not-attributable',
+]);
 
 async function walk(directory) {
   const files = [];
@@ -83,6 +88,8 @@ async function auditComponentAssets(output, manifestEntries) {
     if (identities.has(identity)) add('component-identity-duplicate', identity);
     identities.add(identity);
     if (!['complete', 'partial'].includes(component.coverageStatus)
+      || !['complete', 'partial'].includes(component.behaviorCoverageStatus || component.coverageStatus)
+      || !ASSET_COVERAGE_STATUSES.has(component.assetCoverageStatus || 'implementation-body-not-attributable')
       || !Array.isArray(component.requiredStates) || !Array.isArray(component.coveredStates)
       || !Array.isArray(component.blockedStates) || !component.states || !Array.isArray(component.attempts)
       || !Array.isArray(component.firstObservedAssets) || !Array.isArray(component.bodyUnavailable)) {
@@ -101,6 +108,13 @@ async function auditComponentAssets(output, manifestEntries) {
     if (!sameValues(expectedRequiredStates, component.requiredStates)) add('component-required-states-inconsistent', identity);
     const shouldBeComplete = expectedRequiredStates.every((state) => component.states[state] === 'captured') && blocked.length === 0;
     if ((component.coverageStatus === 'complete') !== shouldBeComplete) add('component-coverage-status-inconsistent', identity);
+    if (component.behaviorCoverageStatus && component.behaviorCoverageStatus !== component.coverageStatus) add('component-behavior-coverage-inconsistent', identity);
+    const expectedAssetCoverage = component.firstObservedAssets.length > 0
+      ? 'implementation-body-retained'
+      : component.bodyUnavailable.length > 0
+        ? 'implementation-body-unavailable'
+        : 'implementation-body-not-attributable';
+    if (component.assetCoverageStatus && component.assetCoverageStatus !== expectedAssetCoverage) add('component-asset-coverage-inconsistent', identity);
     for (const asset of component.firstObservedAssets) {
       if (!manifestAssets.has(`${asset.sha256}\n${asset.url}`)) add('component-asset-not-in-manifest', `${identity}\n${asset.sha256}`);
     }
@@ -121,6 +135,9 @@ async function auditComponentAssets(output, manifestEntries) {
   };
   if (model.summary.total !== expectedSummary.total || model.summary.complete !== expectedSummary.complete
     || model.summary.partial !== expectedSummary.partial) add('component-summary-inconsistent');
+  if (Object.hasOwn(model.summary, 'assetRetained') && model.summary.assetRetained !== model.components.filter((component) => component.assetCoverageStatus === 'implementation-body-retained').length) add('component-summary-inconsistent');
+  if (Object.hasOwn(model.summary, 'assetUnavailable') && model.summary.assetUnavailable !== model.components.filter((component) => component.assetCoverageStatus === 'implementation-body-unavailable').length) add('component-summary-inconsistent');
+  if (Object.hasOwn(model.summary, 'assetNotAttributable') && model.summary.assetNotAttributable !== model.components.filter((component) => component.assetCoverageStatus === 'implementation-body-not-attributable').length) add('component-summary-inconsistent');
   return {
     file: 'metadata/component-assets.json',
     invalid,

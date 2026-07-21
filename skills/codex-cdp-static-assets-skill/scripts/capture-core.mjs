@@ -1,6 +1,6 @@
 import { normalizeAutomationPolicy } from './automation-policy.mjs';
 
-const DEFAULT_TYPES = new Set(['js', 'css', 'wasm', 'font']);
+const DEFAULT_TYPES = new Set(['js', 'css', 'wasm', 'image', 'html']);
 const DEFAULT_LIMITS = { maxAssets: 0, maxTotalMiB: 0, maxAssetMiB: 50 };
 
 export function redactUrl(value) {

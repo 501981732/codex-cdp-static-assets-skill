@@ -43,12 +43,12 @@ Never use page-script evaluation. Accessibility snapshots are transient inputs, 
 
 ## Network stabilization
 
-`list_network_requests` is a snapshot, not a callback. At every widget state:
+`list_network_requests` is a snapshot, not a callback. At baseline, after Catalog opening, and after a resource-triggering action (Widget add, successful data binding, or preview entry):
 
 1. Inspect the complete list for unknown hosts and stop statuses before any body read.
 2. Compare only request IDs and statuses.
-3. Treat the first observation as baseline and require two more identical observations.
-4. Any new request or status change resets the unchanged counter.
+3. When that action changed request IDs or statuses, treat the first observation as baseline and require two more identical observations.
+4. If the request set did not change, do not add a redundant stability loop. Any later new request or status change resets the unchanged counter.
 
 Example:
 

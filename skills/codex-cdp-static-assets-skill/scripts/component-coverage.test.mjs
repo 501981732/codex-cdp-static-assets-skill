@@ -68,10 +68,19 @@ test('builds deterministic complete and partial component coverage', () => {
   assert.equal(coverage.caseId, 'SEC-1');
   assert.equal(coverage.generatedAt, '2026-07-21T01:00:00.000Z');
   assert.deepEqual(coverage.baseline.assets.map((asset) => asset.sha256), ['base']);
-  assert.deepEqual(coverage.summary, { total: 2, complete: 1, partial: 1 });
+  assert.deepEqual(coverage.summary, {
+    total: 2,
+    complete: 1,
+    partial: 1,
+    assetRetained: 2,
+    assetUnavailable: 0,
+    assetNotAttributable: 0,
+  });
 
   const table = coverage.components.find((component) => component.widgetKey === base.widgetKey);
   assert.equal(table.coverageStatus, 'complete');
+  assert.equal(table.behaviorCoverageStatus, 'complete');
+  assert.equal(table.assetCoverageStatus, 'implementation-body-retained');
   assert.equal(table.states['config-opened'], 'captured');
   assert.equal(table.states['data-bound'], 'not-applicable');
   assert.equal(table.requiredStates.includes('data-bound'), false);
@@ -81,6 +90,8 @@ test('builds deterministic complete and partial component coverage', () => {
 
   const chart = coverage.components.find((component) => component.widgetKey === chartBase.widgetKey);
   assert.equal(chart.coverageStatus, 'partial');
+  assert.equal(chart.behaviorCoverageStatus, 'partial');
+  assert.equal(chart.assetCoverageStatus, 'implementation-body-retained');
   assert.deepEqual(chart.blockedStates, ['data-bound']);
   assert.deepEqual(chart.firstObservedAssets.map((asset) => asset.sha256), ['chart']);
   assert.equal(chart.bodyUnavailable[0].requestId, '9');
@@ -104,5 +115,17 @@ test('uses required event flags and rejects cross-case events', () => {
   const coverage = buildComponentCoverage({ caseId: 'SEC-1', events, manifest: [], generatedAt: '2026-07-21T01:00:00.000Z' });
   assert.deepEqual(coverage.components[0].requiredStates, ['editor-mounted']);
   assert.equal(coverage.components[0].coverageStatus, 'complete');
+  assert.equal(coverage.components[0].assetCoverageStatus, 'implementation-body-not-attributable');
   assert.throws(() => buildComponentCoverage({ caseId: 'OTHER', events, manifest: [] }), /caseId mismatch/);
+});
+
+test('keeps Catalog discovery assets shared instead of assigning them to the first Widget', () => {
+  const events = [event('editor-mounted', 'captured', '1')];
+  const manifest = [
+    { sourceRun: 'run-1', at: '2026-07-21T00:00:00.000Z', event: 'saved', marker: 'baseline:catalog', kind: 'image', sha256: 'catalog-icon', url: 'https://cdn.example/catalog.svg', size: 10 },
+    { sourceRun: 'run-1', at: '2026-07-21T00:00:01.000Z', event: 'saved', marker: events[0].marker, kind: 'js', sha256: 'widget', url: 'https://cdn.example/widget.js', size: 20 },
+  ];
+  const coverage = buildComponentCoverage({ caseId: 'SEC-1', events, manifest, generatedAt: '2026-07-21T01:00:00.000Z' });
+  assert.deepEqual(coverage.baseline.assets.map((asset) => asset.marker), ['baseline:catalog']);
+  assert.deepEqual(coverage.components[0].firstObservedAssets.map((asset) => asset.sha256), ['widget']);
 });

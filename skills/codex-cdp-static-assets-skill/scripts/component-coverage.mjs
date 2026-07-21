@@ -1,4 +1,4 @@
-import { COMPONENT_STATES } from './automation-policy.mjs';
+import { COMPONENT_STATES, KNOWN_COMPONENT_STATES } from './automation-policy.mjs';
 
 function compareEvidence(left, right) {
   return String(left.at || '').localeCompare(String(right.at || ''))
@@ -12,6 +12,7 @@ function assetIdentity(entry) {
 
 function assetView(entry) {
   return {
+    marker: entry.marker || null,
     kind: entry.kind || null,
     sha256: entry.sha256,
     url: entry.url,
@@ -102,14 +103,18 @@ export function buildComponentCoverage({ caseId, events, manifest, componentEven
 
   const components = [...groups.values()].map((group) => {
     const first = group.events[0];
+    const stateNames = [...new Set([
+      ...COMPONENT_STATES,
+      ...group.events.map((event) => event.state).filter((state) => KNOWN_COMPONENT_STATES.includes(state)),
+    ])];
     const states = {};
-    for (const state of COMPONENT_STATES) states[state] = selectedStateStatus(group.events.filter((event) => event.state === state));
-    const requiredStates = COMPONENT_STATES.filter((state) => {
+    for (const state of stateNames) states[state] = selectedStateStatus(group.events.filter((event) => event.state === state));
+    const requiredStates = stateNames.filter((state) => {
       if (['not-applicable', 'not-requested'].includes(states[state])) return false;
       return group.events.some((event) => event.state === state && event.required === true);
     });
-    const coveredStates = COMPONENT_STATES.filter((state) => states[state] === 'captured');
-    const blockedStates = COMPONENT_STATES.filter((state) => states[state] === 'failed' || states[state].startsWith('blocked-'));
+    const coveredStates = stateNames.filter((state) => states[state] === 'captured');
+    const blockedStates = stateNames.filter((state) => states[state] === 'failed' || states[state].startsWith('blocked-'));
     const failures = uniqueSorted(
       group.events.filter((event) => event.failure).map((event) => ({
         state: event.state,
@@ -131,7 +136,18 @@ export function buildComponentCoverage({ caseId, events, manifest, componentEven
       required: event.required,
       failure: event.failure,
     })).sort(compareEvidence);
-    const coverageStatus = requiredStates.every((state) => states[state] === 'captured') && blockedStates.length === 0 ? 'complete' : 'partial';
+    const behaviorCoverageStatus = requiredStates.every((state) => states[state] === 'captured') && blockedStates.length === 0 ? 'complete' : 'partial';
+    const firstObservedAssets = uniqueSorted(
+      group.assets,
+      assetIdentity,
+      (left, right) => String(left.kind).localeCompare(String(right.kind)) || left.url.localeCompare(right.url) || left.sha256.localeCompare(right.sha256),
+    );
+    const bodyUnavailable = uniqueSorted(group.bodyUnavailable, (entry) => `${entry.url}\n${entry.requestId}\n${entry.sourceRun}`);
+    const assetCoverageStatus = firstObservedAssets.length > 0
+      ? 'implementation-body-retained'
+      : bodyUnavailable.length > 0
+        ? 'implementation-body-unavailable'
+        : 'implementation-body-not-attributable';
     return {
       widgetKey: first.widgetKey,
       label: first.label,
@@ -139,18 +155,17 @@ export function buildComponentCoverage({ caseId, events, manifest, componentEven
       capturePage: first.capturePage,
       visibleInstanceLabel: first.visibleInstanceLabel,
       marker: first.marker.replace(new RegExp(`:${first.state}$`), ''),
-      coverageStatus,
+      // coverageStatus is retained as a behavior-coverage compatibility alias.
+      coverageStatus: behaviorCoverageStatus,
+      behaviorCoverageStatus,
+      assetCoverageStatus,
       requiredStates,
       coveredStates,
       blockedStates,
       states,
       attempts,
-      firstObservedAssets: uniqueSorted(
-        group.assets,
-        assetIdentity,
-        (left, right) => String(left.kind).localeCompare(String(right.kind)) || left.url.localeCompare(right.url) || left.sha256.localeCompare(right.sha256),
-      ),
-      bodyUnavailable: uniqueSorted(group.bodyUnavailable, (entry) => `${entry.url}\n${entry.requestId}\n${entry.sourceRun}`),
+      firstObservedAssets,
+      bodyUnavailable,
       failures,
     };
   }).sort((left, right) => left.widgetKey.localeCompare(right.widgetKey) || left.capturePage.localeCompare(right.capturePage));
@@ -159,6 +174,9 @@ export function buildComponentCoverage({ caseId, events, manifest, componentEven
     total: components.length,
     complete: components.filter((component) => component.coverageStatus === 'complete').length,
     partial: components.filter((component) => component.coverageStatus === 'partial').length,
+    assetRetained: components.filter((component) => component.assetCoverageStatus === 'implementation-body-retained').length,
+    assetUnavailable: components.filter((component) => component.assetCoverageStatus === 'implementation-body-unavailable').length,
+    assetNotAttributable: components.filter((component) => component.assetCoverageStatus === 'implementation-body-not-attributable').length,
   };
   return {
     schemaVersion: 1,

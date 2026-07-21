@@ -4,7 +4,7 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { COMPONENT_STATES } from './automation-policy.mjs';
+import { KNOWN_COMPONENT_STATES } from './automation-policy.mjs';
 import { normalizeScope } from './capture-core.mjs';
 
 export const COMPONENT_STATUSES = Object.freeze([
@@ -40,7 +40,7 @@ export function validateComponentEvent(input, { runName } = {}) {
     at: input.at || new Date().toISOString(),
     failure: input.failure ?? null,
   };
-  if (!COMPONENT_STATES.includes(event.state)) throw new Error(`Unknown component state: ${event.state}`);
+  if (!KNOWN_COMPONENT_STATES.includes(event.state)) throw new Error(`Unknown component state: ${event.state}`);
   if (!COMPONENT_STATUSES.includes(event.status)) throw new Error(`Unknown component status: ${event.status}`);
   if (typeof event.required !== 'boolean') throw new Error('Component event required must be boolean');
   if (['not-applicable', 'not-requested'].includes(event.status) && event.required !== false) {

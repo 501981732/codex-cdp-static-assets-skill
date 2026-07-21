@@ -7,10 +7,20 @@ import { fileURLToPath } from 'node:url';
 
 export const COMPONENT_STATES = Object.freeze([
   'editor-mounted',
-  'viewport-visible',
-  'config-opened',
   'data-bound',
   'preview-visible',
+]);
+
+// Keep prior deliveries auditable after the capture matrix was simplified.
+// These states are no longer accepted in new automation Scopes.
+export const LEGACY_COMPONENT_STATES = Object.freeze([
+  'viewport-visible',
+  'config-opened',
+]);
+
+export const KNOWN_COMPONENT_STATES = Object.freeze([
+  ...COMPONENT_STATES,
+  ...LEGACY_COMPONENT_STATES,
 ]);
 
 const FORBIDDEN_REAL_DATA_FIELDS = new Set([
@@ -121,7 +131,7 @@ export function buildCatalogQueue(snapshots) {
 }
 
 export function markerForWidget(widgetKey, state) {
-  if (!COMPONENT_STATES.includes(state)) throw new Error(`Unknown component state: ${state}`);
+  if (!KNOWN_COMPONENT_STATES.includes(state)) throw new Error(`Unknown component state: ${state}`);
   const parts = String(widgetKey).split('/');
   if (parts.length !== 3 || parts.some((part) => !part)) throw new Error('widgetKey must contain category/label/version');
   const hash = createHash('sha256').update(widgetKey).digest('hex').slice(0, 8);

@@ -17,7 +17,7 @@ import {
   runAutomationPolicyCli,
 } from './automation-policy.mjs';
 
-const states = ['editor-mounted', 'viewport-visible', 'config-opened', 'data-bound', 'preview-visible'];
+const states = ['editor-mounted', 'data-bound', 'preview-visible'];
 
 function validInput(overrides = {}) {
   return {
@@ -60,6 +60,7 @@ test('rejects incomplete or unsafe automation authorization', () => {
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { maxWidgetsPerPage: 0 } })), /maxWidgetsPerPage/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { mode: 'other' } })), /mode/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { states: ['editor-mounted', 'hidden-state'] } })), /state/);
+  assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { states: ['editor-mounted', 'viewport-visible'] } })), /state/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { captureStateScreenshots: 'yes' } })), /captureStateScreenshots/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowExistingModuleVariables: 'yes' } })), /allowExistingModuleVariables/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ fixtureProfiles: { broken: { kind: 'synthetic' } } })), /visibleOption/);
@@ -112,12 +113,12 @@ test('plans baseline, capacity, and state-level resume deterministically', () =>
   assert.deepEqual(planCapturePage({ count: 8, maxWidgetsPerPage: 8, allowCreateCapturePages: true, pageCount: 1 }), { accepted: true, createPage: true, capturePage: 'CDP Capture 002' });
   assert.deepEqual(planResume({ completedStates: ['editor-mounted'], added: true, fixtureAvailable: false, visibleMatches: 1 }), {
     action: 'resume-existing',
-    missingStates: ['viewport-visible', 'config-opened', 'data-bound', 'preview-visible'],
+    missingStates: ['data-bound', 'preview-visible'],
     dataState: 'blocked-missing-fixture',
   });
   assert.deepEqual(planResume({ completedStates: ['editor-mounted'], added: true, existingVariableAvailable: true, visibleMatches: 1 }), {
     action: 'resume-existing',
-    missingStates: ['viewport-visible', 'config-opened', 'data-bound', 'preview-visible'],
+    missingStates: ['data-bound', 'preview-visible'],
   });
   assert.deepEqual(planResume({ completedStates: [], added: true, fixtureAvailable: true, visibleMatches: 2 }), {
     action: 'blocked',

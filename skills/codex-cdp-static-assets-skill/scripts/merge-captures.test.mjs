@@ -109,7 +109,7 @@ test('merges source-run component events into component-assets.json', async () =
   });
   assert.equal(componentView.component.firstObservedAssets, undefined);
   assert.deepEqual(componentView.component.newlyObservedAssets, [{
-    kind: 'js', sha256: 'widget', url: 'https://cdn.example/widget.js', size: widgetSource.length,
+    marker, kind: 'js', sha256: 'widget', url: 'https://cdn.example/widget.js', size: widgetSource.length,
     file: 'assets/cdn.example/widget.js',
   }]);
   assert.deepEqual(componentView.component.screenshots, [{

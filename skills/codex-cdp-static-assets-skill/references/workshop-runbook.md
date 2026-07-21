@@ -9,7 +9,7 @@ Automatically exercise every visible Widget and its naturally triggered loading 
 1. Connect to the signed-in default Chrome with MCP `--autoConnect` and select the unique exact `pageHosts` page.
 2. Keep snapshots and page-list results in memory. Use `take_snapshot` to verify the approved Module and visible Add Widget entry point.
 3. Use `list_network_requests` without body reads to list exact current hosts and statuses.
-4. Present the exact host candidates, automation mode, autosave/page-creation actions, five states, optional element-level screenshots, asset limits, existing Module variable policy, and optional fixture overrides as a **single consolidated authorization**.
+4. Present the exact host candidates, automation mode, autosave/page-creation actions, the three-state matrix, optional element-level screenshots, asset limits, existing Module variable policy, and optional fixture overrides as a **single consolidated authorization**.
 5. Write and validate `capture-scope.json`. Do not mutate before approval.
 
 ## Phase 2: baseline
@@ -47,7 +47,7 @@ Canonical identity is visible category/label/version-or-type. The same key in la
 
 Keep the visible catalog queue separate from the baseline registry. Use the registry to detect coverage gaps and support later reverse engineering; use only the visible catalog to decide what can be added through the authorized UI.
 
-Catalog enumeration is complete only after reaching bottom and receiving two consecutive observations with no new key. Do not persist the accessibility snapshot or DOM.
+Catalog enumeration is complete only after reaching bottom and receiving two consecutive observations with no new key. Do not persist the accessibility snapshot or DOM. Import natural Catalog preview/icon responses with marker `baseline:catalog` before adding the first Widget; this shared discovery batch must never become a Widget's `firstObservedAssets`.
 
 ## Phase 4: deterministic pages and resume
 
@@ -70,18 +70,16 @@ Generate a state marker:
 ```bash
 node scripts/automation-policy.mjs marker \
   --widget-key tables/object-table/v1 \
-  --state viewport-visible
+  --state editor-mounted
 ```
 
 Then run states in this order:
 
-1. `editor-mounted`: use `click` or visible `drag` to add; verify the unique visible instance.
-2. `viewport-visible`: scroll the canvas until the instance is visible. This step is mandatory even if editor-mounted loaded assets, because viewport virtualization may defer rendering.
-3. `config-opened`: open the visible configuration UI and wait for it to settle.
-4. `data-bound`: inspect visible capability/requiredness. Prefer an exact mapped fixture. Otherwise, when `allowExistingModuleVariables` is true, keep a compatible current selection or choose the first enabled option exposed by the visible typed variable selector. If none exists, record `not-requested` for an optional source or `blocked-missing-fixture` for a required source and continue. Use `fill` only for authorized visible configuration fields. Autosave is the only allowed persistence.
-5. `preview-visible`: enter preview, scroll the instance into view, and wait for visible rendering.
+1. `editor-mounted`: use `click` or visible `drag` to add; verify the unique visible instance. If needed, scroll it into the viewport before recording this state; viewport visibility is an execution guard, not another coverage state.
+2. `data-bound`: only for a Widget with a visible data-input capability. Open configuration, inspect visible requiredness, and prefer an exact mapped manually pre-created fixture. Otherwise, when `allowExistingModuleVariables` is true, keep a compatible current selection or choose the first enabled option exposed by the visible typed variable selector. If none exists, record `not-requested` for an optional source or `blocked-missing-fixture` for a required source and continue. Use `fill` only for authorized visible configuration fields. Autosave is the only allowed persistence.
+3. `preview-visible`: enter preview, scroll the instance into view, and wait for visible rendering. Keep this separate because preview can load a runtime bundle that editor mounting does not.
 
-After configuration, scroll back to the widget before capture so configuration-driven lazy rendering is not missed.
+After successful data configuration, scroll back to the Widget before capture so configuration-driven lazy rendering is not missed.
 
 If `captureStateScreenshots` is true and the successful state has a unique Widget or panel `uid`, save a PNG with `take_screenshot` to:
 
@@ -102,19 +100,19 @@ node scripts/record-component-state.mjs \
   --category Tables \
   --capture-page 'CDP Capture 001' \
   --visible-instance-label 'Object Table' \
-  --marker widget:object-table:a1b2c3d4:viewport-visible \
-  --state viewport-visible \
+  --marker widget:object-table:a1b2c3d4:editor-mounted \
+  --state editor-mounted \
   --status captured \
   --required \
-  --attempt-id capture-run-1:viewport-visible:2
+  --attempt-id capture-run-1:editor-mounted:2
 ```
 
 Attempt IDs are unique within the run and use `<run>:<state>:<monotonic-number>`. Failures require `--failure-code` and `--failure-message`. Use `--not-required` for `not-applicable`/`not-requested`.
 
-## Phase 6: request ingestion at every state
+## Phase 6: request ingestion at resource-triggering boundaries
 
-1. Call `list_network_requests` for all types and check hosts/statuses first.
-2. Feed only `(requestId,status)` to `network-update`; three identical observations are stable.
+1. Call `list_network_requests` for all types and check hosts/statuses first after baseline, Catalog opening, Widget addition, successful data binding, and preview entry.
+2. If the action produced new request IDs or statuses, feed only `(requestId,status)` to `network-update`; three identical observations are stable. If no static request changed, do not add a redundant stabilization loop.
 3. For each approved completed asset, call `get_network_request` with `reqid` and `responseFilePath` under `os.tmpdir()`.
 4. Import immediately with the current widget/state marker. Never set `requestFilePath` and never refetch a URL.
 5. If the body is unavailable, call the importer without `--body` so the manifest records `body-unavailable`.
@@ -136,7 +134,7 @@ node scripts/merge-captures.mjs --output ./delivery ./capture-run-1 ./capture-ru
 node scripts/audit-capture.mjs ./delivery
 ```
 
-The final `metadata/component-assets.json` remains the machine-readable interaction aggregate. Merge also writes `metadata/widget-inventory.json`, `metadata/baseline-assets.json`, and one human-oriented file per interacted Widget under `metadata/components/`. The merged Widget inventory keeps the registry-declared IDs and adds `retainedEvidence`: matching Chunk/module delivery files, unretained IDs, and an implementation-body retention status. This is local evidence resolution only and never retrieves a missing dependency. Each Widget view uses `newlyObservedAssets`, resolves assets to the merged delivery path, lists copied screenshots, and links to the separate baseline and registry files. Resource bodies remain globally deduplicated.
+The final `metadata/component-assets.json` remains the machine-readable interaction aggregate. It reports `assetCoverageStatus` separately from `behaviorCoverageStatus`: fixture availability can make behavior partial without downgrading retained Widget bodies. Merge also writes `metadata/widget-inventory.json`, `metadata/baseline-assets.json`, and one human-oriented file per interacted Widget under `metadata/components/`. The merged Widget inventory keeps the registry-declared IDs and adds `retainedEvidence`: matching Chunk/module delivery files, unretained IDs, and an implementation-body retention status. This is local evidence resolution only and never retrieves a missing dependency. Each Widget view uses `newlyObservedAssets`, resolves assets to the merged delivery path, lists copied screenshots, and links to the separate baseline and registry files. Resource bodies remain globally deduplicated.
 
 Document HTML means an observed top-level or Widget iframe network document. It is not a serialized post-render Widget DOM.
 

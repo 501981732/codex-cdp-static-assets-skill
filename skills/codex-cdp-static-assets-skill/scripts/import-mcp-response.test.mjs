@@ -105,7 +105,7 @@ test('provenance records only non-sensitive automation policy and fixture names'
     allowExistingModuleVariables: true,
     captureStateScreenshots: true,
     maxWidgetsPerPage: 5,
-    states: ['editor-mounted', 'viewport-visible', 'config-opened', 'data-bound', 'preview-visible'],
+    states: ['editor-mounted', 'data-bound', 'preview-visible'],
   };
   scope.approvedPageUrl = 'https://workshop.example.com/module/edit/module-1';
   scope.moduleId = 'module-1';

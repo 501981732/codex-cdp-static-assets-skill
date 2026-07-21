@@ -2,7 +2,7 @@
 
 [English](README.en.md)
 
-这个 Skill 用一次汇总授权，自动遍历授权 Workshop 中当前账号可见的 Widget，通过真实可见 UI 添加组件、滚动进可视区、打开配置、使用当前 Module 已有的兼容变量并进入预览，再从 Chrome 已完成的 Network 记录中保存自然加载的 JS、CSS、WASM、字体、图片和严格限定的 Document HTML。
+这个 Skill 用一次汇总授权，自动遍历授权 Workshop 中当前账号可见的 Widget，通过真实可见 UI 添加组件、按需打开配置、使用当前 Module 已有的兼容变量并进入预览，再从 Chrome 已完成的 Network 记录中保存自然加载的 JS、CSS、WASM、图片和严格限定的 Document HTML。
 
 它不重新请求资源 URL，不执行页面脚本，不复制登录凭证，也不把“首次观察到”误报为组件源码所有权。
 
@@ -47,29 +47,29 @@ Case ID：SEC-2026-001
 允许在专用测试 Module 中新增 CDP Capture 页面、添加 Widget、修改 Widget 配置并自动保存。
 允许使用当前 Module 已有、Widget 可见类型选择器明确兼容的变量；禁止创建、修改或删除变量或数据源。
 先做只含元数据的主机和 Widget 入口发现，把精确主机、动作、上限和数据源策略一次性列给我授权；授权后全自动执行。
-采集 js、css、wasm、font、image，以及自然加载的顶层/Widget iframe Document HTML。
+采集 js、css、wasm、image，以及自然加载的顶层/Widget iframe Document HTML；默认不采集字体。
 ```
 
 ## 自动化流程
 
-授权前只做 `list_pages`、精确页 `select_page`、`take_snapshot` 和 `list_network_requests` 元数据发现。Codex 随后给出 **single consolidated authorization**：精确主机、页面/自动保存权限、组件页上限、五个状态、流量限制和现有 Module 变量使用策略。
+授权前只做 `list_pages`、精确页 `select_page`、`take_snapshot` 和 `list_network_requests` 元数据发现。Codex 随后给出 **single consolidated authorization**：精确主机、页面/自动保存权限、组件页上限、三状态矩阵、流量限制和现有 Module 变量使用策略。
 
 授权一次后，Codex 自动执行：
 
 1. 采集 `baseline`；预加载资源归为 `baseline/shared`，不会阻止全目录遍历。
 2. 打开 Add Widget，滚动到底；连续两次无新规范 Key 后确认目录完成。
-3. 每页放 5–10 个组件，确定性创建 `CDP Capture 001`、`CDP Capture 002` 等页面。
-4. 对每个 Widget 覆盖 `editor-mounted`、`viewport-visible`、`config-opened`、`data-bound`、`preview-visible`。
-5. 每个状态都先检查全部主机/状态码，再等待三次相同的请求 ID/状态观察，随后按 request ID 读取已完成响应并立即入库。
+3. 每页按 Scope 的上限放组件；默认测试可设为 8 个，确定性创建 `CDP Capture 001`、`CDP Capture 002` 等页面。
+4. Catalog 预览图和图标先归为 `baseline:catalog` 共享发现资源，再对每个 Widget 覆盖 `editor-mounted`、适用时的 `data-bound`、`preview-visible`。
+5. 仅在基线、Catalog、添加组件、成功绑定数据或进入预览后检查网络；有新增请求/状态时才等待三次相同的请求 ID/状态观察，随后按 request ID 读取已完成响应并立即入库。
 6. 每次状态写入可恢复事件；中断后定位唯一现有实例，只补缺失状态，不重复添加。
 7. 从已保存的 baseline JS 导出 Widget 注册清单，再逐 run 审计并按 SHA-256/URL 合并，生成独立基线和每组件逆向视图。
 
-可视区步骤是必需的：Workshop 画布虚拟化或 `IntersectionObserver` 可能直到组件进入视口才渲染/加载。配置数据后还会再次滚回组件并等待渲染。
+可视区是执行前提，不再单列状态：Workshop 画布虚拟化或 `IntersectionObserver` 可能直到组件进入视口才渲染/加载。配置数据后还会再次滚回组件并等待渲染；预览仍单列，因为可能加载独立 runtime。
 
 ## 使用已有变量
 
 - 组件没有数据源能力：`data-bound = not-applicable`，不影响完整度。
-- Scope 设置 `allowExistingModuleVariables: true` 后，优先保留当前兼容选择；否则选择 Widget 可见类型选择器提供的第一个启用兼容变量。
+- Scope 设置 `allowExistingModuleVariables: true` 后，优先用人工预置并映射到精确可见选项的测试变量；否则保留当前兼容选择或选择 Widget 可见类型选择器提供的第一个启用兼容变量。
 - Scope 有精确 Fixture 映射时，该映射优先于自动选择。
 - 没有兼容变量：可选数据源记为 `not-requested`；必填数据源记为 `blocked-missing-fixture`，但继续采集其余状态和后续组件。
 
@@ -97,11 +97,11 @@ XHR、fetch、GraphQL/API HTML 一律排除；JS/CSS 返回 HTML 仍记为无效
 - `metadata/manifest.ndjson`：SHA-256、URL、类型、Marker 和来源 run；
 - `metadata/source-manifest.ndjson`：带 `sourceRun` 的原始观察事件；
 - `metadata/component-events.ndjson`：全部状态尝试；
-- `metadata/component-assets.json`：Case、baseline、每个 Widget 的状态覆盖、首次观察资源、正文缺失和历史失败；
+- `metadata/component-assets.json`：Case、baseline、每个 Widget 的 `assetCoverageStatus`、`behaviorCoverageStatus`、首次观察资源、正文缺失和历史失败；
 - `metadata/widget-inventory.json`：baseline Bundle 已声明的 Type ID、Renderer、Chunk/模块 ID 和来源哈希；合并后通过 `retainedEvidence` 标出已落盘的 Chunk/模块文件、未留存 ID 和实现正文状态；
 - `metadata/baseline-assets.json`：页面启动和共享资源，资源正文不重复存储；
 - `metadata/components/*.json`：Input、Table 等组件各自的状态、首次观察资源引用、正文缺失、失败和已授权截图；
 - `evidence/`：仅在 Scope 设置 `captureStateScreenshots: true` 时保存的元素级状态截图；
 - `metadata/asset-audit.json`、`metadata/merge-summary.json`：完整性和覆盖摘要。
 
-`firstObservedAssets` 会排除 baseline，并把同一 `(sha256, URL)` 只分配给最早的非 baseline Widget Marker。它表示观察时序，不代表独占归属。
+`firstObservedAssets` 会排除 `baseline` 和 `baseline:catalog`，并把同一 `(sha256, URL)` 只分配给最早的非共享 Widget Marker。它表示观察时序，不代表独占归属；数据 Fixture 缺失不会降低资源正文留存结论。

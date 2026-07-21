@@ -1,6 +1,6 @@
 ---
 name: codex-cdp-static-assets-skill
-description: Use when Codex must automatically exercise an authorized Workshop widget catalog through visible Chrome UI and capture naturally loaded JS, CSS, WASM, fonts, images, and approved document HTML with CDP after one consolidated authorization.
+description: Use when Codex must automatically exercise an authorized Workshop widget catalog through visible Chrome UI and capture naturally loaded JS, CSS, WASM, images, and approved document HTML with CDP after one consolidated authorization.
 ---
 
 # Automated Workshop Asset Capture with CDP
@@ -32,18 +32,17 @@ After the user approves that Scope once, run automatically without per-widget or
 2. Select the unique page matching `pageHosts`. Never inspect unrelated pages.
 3. Capture and import the `baseline`; in automation mode, a `preloaded` baseline is classified as shared evidence and does not stop widget traversal. Run `widget-inventory.mjs` against the retained baseline JS to export registry entries already present in those bodies. Treat them as expected inventory, not interaction evidence.
 4. Open Add Widget with visible UI. Repeatedly use `take_snapshot` and visible scroll/End operations until the catalog tracker reports two consecutive bottom observations with no new canonical widget key. Cross-snapshot repeats are deduplicated; two indistinguishable same-key entries in one snapshot stop as `catalog-identity-ambiguity`.
-5. Process widgets in deterministic catalog order. Keep at most `maxWidgetsPerPage` on `CDP Capture 001`, `CDP Capture 002`, and so on. Full-catalog mode may create pages only when `allowCreateCapturePages: true`; single-page mode records `blocked-page-capacity` at the limit.
-6. Locate an existing instance by capture page, canonical widget key, and recorded visible label before adding. Resume only missing states. Multiple matches stop as `blocked-existing-instance-ambiguous`; never add a duplicate to guess.
-7. Exercise each applicable state with visible tools and a stable marker:
-   - `editor-mounted`: add the widget and verify its visible instance.
-   - `viewport-visible`: scroll the canvas until the instance is visibly in the viewport; this triggers virtualization/IntersectionObserver paths naturally.
-   - `config-opened`: open visible widget configuration.
-   - `data-bound`: if no data-source capability exists, record `not-applicable`. Prefer an exact `widgetFixtureMap` override. Otherwise, when `allowExistingModuleVariables: true`, keep a compatible current selection or choose the first enabled option exposed by the Widget's typed variable selector. If no compatible variable exists, record `not-requested` for an optional source or `blocked-missing-fixture` for a required source, then continue with the remaining states and Widgets. Allow only the approved autosave.
-   - `preview-visible`: enter visible preview and scroll the widget into view.
-8. When `captureStateScreenshots` is authorized, capture the uniquely identified visible Widget or configuration panel after each successful state to `evidence/components/<marker-base>/<state>--<attempt-number>.png`. Do not persist DOM or full-page screenshots.
-9. At every state, inspect the complete request list first. Stop before body access on an unknown host, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, or unexpected write. Wait for three identical request/status observations: baseline plus two unchanged observations.
-10. For each approved completed request, call `get_network_request` once by request ID, import the staged body immediately, and delete staging through the importer. Record `body-unavailable` when Chrome cannot supply the body; never refetch the URL.
-11. Record every state attempt with `record-component-state.mjs`. Audit each run, merge once with `merge-captures.mjs`, then audit the delivery and `component-assets.json`.
+5. Import natural Catalog preview/icon responses under the shared marker `baseline:catalog` before adding the first Widget. They are discovery evidence, never a Widget's `firstObservedAssets`.
+6. Process widgets in deterministic catalog order. Keep at most `maxWidgetsPerPage` on `CDP Capture 001`, `CDP Capture 002`, and so on. Full-catalog mode may create pages only when `allowCreateCapturePages: true`; single-page mode records `blocked-page-capacity` at the limit.
+7. Locate an existing instance by capture page, canonical widget key, and recorded visible label before adding. Resume only missing states. Multiple matches stop as `blocked-existing-instance-ambiguous`; never add a duplicate to guess.
+8. Exercise the three-state matrix with visible tools and a stable marker:
+   - `editor-mounted`: add the Widget and verify that its instance is visibly mounted. Scrolling into view is an action within this state, not a separate coverage state.
+   - `data-bound`: only for Widgets with a visible data-input capability. Prefer an exact `widgetFixtureMap` entry for a manually pre-created test variable. Otherwise, when `allowExistingModuleVariables: true`, keep a compatible current selection or choose the first enabled option exposed by the Widget's typed variable selector. If no compatible variable exists, record `not-requested` for an optional source or `blocked-missing-fixture` for a required source, then continue. Opening configuration is an action within this state, not a separate coverage state. Allow only approved autosave.
+   - `preview-visible`: enter visible preview and scroll the Widget into view; this remains separate because preview can load a distinct runtime bundle.
+9. When `captureStateScreenshots` is authorized, capture at most one uniquely identified Widget or configuration panel per successful state to `evidence/components/<marker-base>/<state>--<attempt-number>.png`. Default to no screenshots. Do not persist DOM or full-page screenshots.
+10. At the baseline, after Catalog opening, and after an action that can load a resource (add, successful data binding, or preview), inspect the complete request list first. Stop before body access on an unknown host, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, or unexpected write. When new request IDs or statuses appear, wait for baseline plus two unchanged observations; otherwise continue without a redundant stability loop.
+11. For each approved completed request, call `get_network_request` once by request ID, import the staged body immediately, and delete staging through the importer. Record `body-unavailable` when Chrome cannot supply the body; never refetch the URL.
+12. Record every state attempt with `record-component-state.mjs`. Audit each run, merge once with `merge-captures.mjs`, then audit the delivery and `component-assets.json`.
 
 ## HTML boundary
 
@@ -61,7 +60,7 @@ Use only visible, authorized controls. `click`, `drag`, `fill`, `press_key`, `wa
 
 Each run contains content-addressed assets, redacted manifest entries, `widget-inventory.json`, state attempts, optional state screenshots, risk/invalid events, and summary counters. The merged delivery contains `metadata/widget-inventory.json`, the aggregate `metadata/component-assets.json`, `metadata/baseline-assets.json`, one reverse-engineering view per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated assets at their redacted delivery paths. The merged Widget inventory resolves registry-declared Chunk/module IDs against retained JavaScript and records matching delivery files plus unretained IDs; it never fetches a missing dependency.
 
-`component-assets.json` distinguishes `baseline/shared`, per-widget `firstObservedAssets`, `bodyUnavailable`, failures, and complete/partial state coverage. First observation is evidence of timing, not proof that a bundle belongs exclusively to that widget.
+`component-assets.json` distinguishes `baseline/shared` (including `baseline:catalog`), per-widget `firstObservedAssets`, `bodyUnavailable`, failures, `assetCoverageStatus`, and `behaviorCoverageStatus`. Asset retention and behavior coverage are separate: a missing test fixture never downgrades retained implementation bodies. First observation is evidence of timing, not proof that a bundle belongs exclusively to that Widget.
 
 Each per-Widget view renames this evidence to `newlyObservedAssets`, resolves every asset to its merged delivery `file`, and links to the separate baseline view. Approved Document HTML is a network document, not a serialized runtime Widget DOM.
 
