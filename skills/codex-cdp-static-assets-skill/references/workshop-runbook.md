@@ -73,11 +73,12 @@ node scripts/automation-policy.mjs marker \
   --state editor-mounted
 ```
 
-Then run states in this order:
+Then run each Widget in this order: add → configure variable input when present → save and publish → development preview → resource capture.
 
 1. `editor-mounted`: use `click` or visible `drag` to add; verify the unique visible instance. If needed, scroll it into the viewport before recording this state; viewport visibility is an execution guard, not another coverage state.
-2. `data-bound`: only for a Widget with a visible variable-input capability. Open configuration and inspect visible requiredness. With `allowModuleVariables`, create or select a compatible variable, bind it, and clean it up after evidence capture when appropriate. Do not inspect the request payload or business data behind the variable. If no permitted compatible path exists, record `not-requested` for an optional input or `blocked-missing-fixture` for a required input and continue. Use `fill` only for authorized visible configuration fields. Autosave is the only allowed persistence.
-3. `preview-visible`: enter preview, scroll the instance into view, and wait for visible rendering. Keep this separate because preview can load a runtime bundle that editor mounting does not.
+2. `data-bound`: only for a Widget with a visible variable-input capability. Open configuration and inspect visible requiredness. With `allowModuleVariables`, create or select a compatible variable, bind it, and clean it up after evidence capture when appropriate. If no permitted compatible path exists, record `not-requested` for an optional input or `blocked-missing-fixture` for a required input and continue. Use `fill` only for authorized visible configuration fields.
+3. Save through approved autosave, then publish through the visible control only when `allowPublish` is true. Verify publish completion before opening preview; otherwise record `blocked-missing-publish-authority`.
+4. `preview-visible`: enter development preview, scroll the instance into view, and wait for visible rendering. Keep this separate because preview can load a runtime bundle that editor mounting does not. Only then read the completed approved responses observed since the Widget was added, keeping each request's action marker.
 
 After successful data configuration, scroll back to the Widget before capture so configuration-driven lazy rendering is not missed.
 
@@ -111,9 +112,9 @@ Attempt IDs are unique within the run and use `<run>:<state>:<monotonic-number>`
 
 ## Phase 6: request ingestion at resource-triggering boundaries
 
-1. Call `list_network_requests` for all types and check hosts/statuses first after baseline, Catalog opening, Widget addition, successful data binding, and preview entry. Ignore `chrome-extension://` local browser requests without reading, retaining, or authorizing them; unknown HTTP/HTTPS hosts still stop the run.
+1. Call `list_network_requests` for all types and check hosts/statuses after baseline, Catalog opening, Widget addition, successful variable binding, save/publish, and preview entry. Ignore `chrome-extension://` local browser requests without reading, retaining, or authorizing them; unknown HTTP/HTTPS hosts still stop the run. Record action markers only; do not read response bodies before preview.
 2. If the action produced new request IDs or statuses, feed only `(requestId,status)` to `network-update`; three identical observations are stable. If no static request changed, do not add a redundant stabilization loop.
-3. For each approved completed asset, call `get_network_request` with `reqid` and `responseFilePath` under `os.tmpdir()`.
+3. After the Widget is visible in development preview, call `get_network_request` once for each approved completed asset observed during its add/configure/save-publish/preview sequence, with `reqid` and `responseFilePath` under `os.tmpdir()`.
 4. Import immediately with the current widget/state marker. Never set `requestFilePath` and never refetch a URL.
 5. If the body is unavailable, call the importer without `--body` so the manifest records `body-unavailable`.
 

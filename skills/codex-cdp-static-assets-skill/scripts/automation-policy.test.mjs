@@ -30,6 +30,7 @@ function validInput(overrides = {}) {
       enabled: true,
       mode: 'full-catalog',
       allowAutosave: true,
+      allowPublish: true,
       allowCreateCapturePages: true,
       allowModuleVariables: true,
       maxWidgetsPerPage: 8,
@@ -44,6 +45,7 @@ test('normalizes and freezes a fully authorized automation policy', () => {
   assert.equal(policy.enabled, true);
   assert.equal(policy.mode, 'full-catalog');
   assert.equal(policy.maxWidgetsPerPage, 8);
+  assert.equal(policy.allowPublish, true);
   assert.equal(policy.allowModuleVariables, true);
   assert.equal(policy.allowExistingModuleVariables, true);
   assert.equal(policy.allowCreateTestVariables, true);
@@ -59,6 +61,7 @@ test('normalizes and freezes a fully authorized automation policy', () => {
 test('rejects incomplete or unsafe automation authorization', () => {
   assert.throws(() => normalizeAutomationPolicy({ automation: { mode: 'full-catalog' } }), /explicit boolean/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowAutosave: false } })), /allowAutosave/);
+  assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowPublish: 'yes' } })), /allowPublish/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowCreateCapturePages: false } })), /allowCreateCapturePages/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { mode: 'single-page', allowCreateCapturePages: true } })), /single-page/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { maxWidgetsPerPage: 0 } })), /maxWidgetsPerPage/);

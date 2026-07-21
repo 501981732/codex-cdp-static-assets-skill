@@ -102,6 +102,7 @@ async function initializeOutput(output, scope, ledgerPath) {
       enabled: true,
       mode: scope.automation.mode,
       allowAutosave: scope.automation.allowAutosave,
+      allowPublish: scope.automation.allowPublish,
       allowCreateCapturePages: scope.automation.allowCreateCapturePages,
       allowModuleVariables: scope.automation.allowModuleVariables,
       captureStateScreenshots: scope.automation.captureStateScreenshots,

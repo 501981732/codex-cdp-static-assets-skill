@@ -52,6 +52,9 @@ export function normalizeAutomationPolicy(input = {}) {
   if (automation.enabled !== true) throw new Error('Automation enabled must be an explicit boolean');
   if (!['full-catalog', 'single-page'].includes(automation.mode)) throw new Error('Automation mode must be full-catalog or single-page');
   if (automation.allowAutosave !== true) throw new Error('Enabled automation requires allowAutosave: true');
+  if (automation.allowPublish !== undefined && typeof automation.allowPublish !== 'boolean') {
+    throw new Error('Automation allowPublish must be a boolean');
+  }
   if (automation.mode === 'full-catalog' && automation.allowCreateCapturePages !== true) {
     throw new Error('full-catalog automation requires allowCreateCapturePages: true');
   }
@@ -100,6 +103,7 @@ export function normalizeAutomationPolicy(input = {}) {
     enabled: true,
     mode: automation.mode,
     allowAutosave: true,
+    allowPublish: automation.allowPublish === true,
     allowCreateCapturePages: automation.allowCreateCapturePages,
     allowModuleVariables,
     // Retain old Scope fields for audit compatibility. New Scopes use the one

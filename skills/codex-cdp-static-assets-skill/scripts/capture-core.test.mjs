@@ -64,6 +64,7 @@ test('normalizes the automation and synthetic fixture policy with the capture sc
       enabled: true,
       mode: 'single-page',
       allowAutosave: true,
+      allowPublish: true,
       allowCreateCapturePages: false,
       allowModuleVariables: true,
       maxWidgetsPerPage: 5,
@@ -73,6 +74,7 @@ test('normalizes the automation and synthetic fixture policy with the capture sc
     widgetFixtureMap: { 'tables/object-table/v1': 'objects' },
   });
   assert.equal(scope.automation.mode, 'single-page');
+  assert.equal(scope.automation.allowPublish, true);
   assert.equal(scope.automation.allowModuleVariables, true);
   assert.deepEqual(scope.fixtureProfileNames, ['objects']);
   assert.deepEqual(scope.widgetFixtureMap, { 'tables/object-table/v1': 'objects' });

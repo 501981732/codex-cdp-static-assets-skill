@@ -101,6 +101,7 @@ test('provenance records only non-sensitive automation policy and fixture names'
     enabled: true,
     mode: 'single-page',
     allowAutosave: true,
+    allowPublish: true,
     allowCreateCapturePages: false,
     allowModuleVariables: true,
     captureStateScreenshots: true,
@@ -134,6 +135,7 @@ test('provenance records only non-sensitive automation policy and fixture names'
   const provenance = JSON.parse(provenanceText);
   assert.deepEqual(provenance.automation.fixtureProfileNames, ['objects']);
   assert.deepEqual(provenance.automation.mappedWidgetKeys, ['tables/object-table/v1']);
+  assert.equal(provenance.automation.allowPublish, true);
   assert.equal(provenance.automation.captureStateScreenshots, true);
   assert.equal(provenance.automation.allowModuleVariables, true);
   assert.equal(provenanceText.includes('must-not-persist'), false);

@@ -31,6 +31,7 @@ Record the case ID, exact page host/Module, test account, time and traffic ceili
     "enabled": true,
     "mode": "full-catalog",
     "allowAutosave": true,
+    "allowPublish": true,
     "allowCreateCapturePages": true,
     "allowModuleVariables": true,
     "captureStateScreenshots": false,
@@ -54,6 +55,7 @@ node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
 
 - `full-catalog` requires `allowAutosave: true` and `allowCreateCapturePages: true`. Pages are named `CDP Capture 001`, `CDP Capture 002`, and so on.
 - `single-page` requires `allowAutosave: true` and `allowCreateCapturePages: false`. At capacity, record `blocked-page-capacity` and stop.
+- `allowPublish: true` authorizes the visible save-and-publish action before development preview. Without it, a Widget requiring publish records `blocked-missing-publish-authority`.
 - `captureStateScreenshots: true` authorizes one element-level PNG evidence item per successful state. Omit it or set it to `false` by default.
 - `allowModuleVariables: true` authorizes creating, selecting, modifying, deleting, and cleaning up variables through visible UI in the exact approved Module.
 - Omitted automation is passive mode. An automation object must use an explicit boolean `enabled`.

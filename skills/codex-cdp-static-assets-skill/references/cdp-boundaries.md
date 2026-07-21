@@ -14,7 +14,7 @@ Only after the single consolidated authorization, use these Chrome DevTools MCP 
 | Inspect already observed requests | `list_network_requests` |
 | Read one completed response | `get_network_request` with `reqid` and `responseFilePath` |
 
-Visible actions are restricted to the approved Workshop Module: Add Widget, deterministic capture-page creation, authorized Module-variable handling, canvas/catalog scrolling, widget configuration, autosave, preview, and explicitly authorized element-level state screenshots.
+Visible actions are restricted to the approved Workshop Module: Add Widget, deterministic capture-page creation, authorized Module-variable handling, canvas/catalog scrolling, widget configuration, autosave, authorized publish, development preview, and explicitly authorized element-level state screenshots.
 
 ## Prohibited operations
 
@@ -25,7 +25,7 @@ Never use `evaluate_script`. Never set `requestFilePath`.
 - Never clear/disable cache, bypass a Service Worker, intercept traffic, or alter headers, signatures, origin, referer, fingerprint, requests, or responses.
 - Never extract or transfer cookies, Authorization values, passwords, request bodies, browser profiles, or unrelated tab metadata.
 - Never use full-page screenshots or retain accessibility/DOM snapshots. If the Widget or panel cannot be uniquely targeted, omit the screenshot instead of widening the evidence scope.
-- Never publish, run actions/workflows, export, change permissions, write business data, or inspect request payloads. Module variables may be handled only when `allowModuleVariables: true` is in the approved Scope.
+- Never run actions/workflows, export, change permissions, write business data, or inspect request payloads. Module variables may be handled only when `allowModuleVariables: true` is in the approved Scope; publish is allowed only when `allowPublish: true` is in the approved Scope.
 
 ## Response-body rule
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "Workshop Widget 自动资源采集"
   short_description: "一次授权后自动遍历 Widget 并采集自然加载资源"
-  default_prompt: "使用 $codex-cdp-static-assets-skill 自动采集授权 Workshop 中全部可见 Widget 的自然加载资源。先做元数据发现并一次性确认精确主机、自动保存、建页、自动处理 Module 变量和每页上限；授权后自动添加组件、滚动进可视区、配置变量、预览、读取 Chrome 已完成响应，包含严格限定的 Document HTML。禁止页面脚本、主动重抓 URL、请求载荷读取和凭证提取。"
+  default_prompt: "使用 $codex-cdp-static-assets-skill 自动采集授权 Workshop 中全部可见 Widget 的自然加载资源。先做元数据发现并一次性确认精确主机、自动保存与发布、建页、自动处理 Module 变量和每页上限；授权后按添加、配置变量、保存发布、开发预览、读取 Chrome 已完成响应的顺序执行，包含严格限定的 Document HTML。禁止页面脚本、主动重抓 URL、请求载荷读取和凭证提取。"

@@ -66,8 +66,8 @@ Capture js, css, wasm, image, and naturally loaded page or Widget-iframe HTML. E
 
 1. It records resources already loaded when the page opens (`baseline`).
 2. It opens Add Widget, scrolls to the bottom, and confirms the catalog is complete.
-3. It adds Widgets in batches. Each Widget is mounted in the editor, optionally bound to an existing test variable, then opened in preview.
-4. After each action, it reads only new, completed responses from Chrome Network; URLs are never replayed.
+3. It adds Widgets in batches. Each Widget is configured with a variable when needed, then saved, published, and opened in development preview.
+4. After development preview, it reads only completed responses naturally observed during that sequence; URLs are never replayed.
 5. If interrupted, it resumes by locating existing Widgets and filling only missing states.
 
 Catalog icons and preview images are recorded as shared `baseline:catalog` resources, rather than being attributed to an individual Widget.
