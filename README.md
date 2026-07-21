@@ -2,7 +2,7 @@
 
 [English](README.en.md)
 
-这个 Skill 用一次汇总授权，自动遍历授权 Workshop 中当前账号可见的 Widget，通过真实可见 UI 添加组件、滚动进可视区、打开配置、绑定获批合成数据并进入预览，再从 Chrome 已完成的 Network 记录中保存自然加载的 JS、CSS、WASM、字体、图片和严格限定的 Document HTML。
+这个 Skill 用一次汇总授权，自动遍历授权 Workshop 中当前账号可见的 Widget，通过真实可见 UI 添加组件、滚动进可视区、打开配置、使用当前 Module 已有的兼容变量并进入预览，再从 Chrome 已完成的 Network 记录中保存自然加载的 JS、CSS、WASM、字体、图片和严格限定的 Document HTML。
 
 它不重新请求资源 URL，不执行页面脚本，不复制登录凭证，也不把“首次观察到”误报为组件源码所有权。
 
@@ -45,14 +45,14 @@ https://workshop.example.com/module/edit/...
 
 Case ID：SEC-2026-001
 允许在专用测试 Module 中新增 CDP Capture 页面、添加 Widget、修改 Widget 配置并自动保存。
-只允许使用我批准的现有合成测试数据源；禁止创建、修改或删除数据源。
-先做只含元数据的主机和 Widget 入口发现，把精确主机、动作、上限和 Fixture 映射一次性列给我授权；授权后全自动执行。
+允许使用当前 Module 已有、Widget 可见类型选择器明确兼容的变量；禁止创建、修改或删除变量或数据源。
+先做只含元数据的主机和 Widget 入口发现，把精确主机、动作、上限和数据源策略一次性列给我授权；授权后全自动执行。
 采集 js、css、wasm、font、image，以及自然加载的顶层/Widget iframe Document HTML。
 ```
 
 ## 自动化流程
 
-授权前只做 `list_pages`、精确页 `select_page`、`take_snapshot` 和 `list_network_requests` 元数据发现。Codex 随后给出 **single consolidated authorization**：精确主机、页面/自动保存权限、组件页上限、五个状态、流量限制和合成 Fixture 映射。
+授权前只做 `list_pages`、精确页 `select_page`、`take_snapshot` 和 `list_network_requests` 元数据发现。Codex 随后给出 **single consolidated authorization**：精确主机、页面/自动保存权限、组件页上限、五个状态、流量限制和现有 Module 变量使用策略。
 
 授权一次后，Codex 自动执行：
 
@@ -66,14 +66,14 @@ Case ID：SEC-2026-001
 
 可视区步骤是必需的：Workshop 画布虚拟化或 `IntersectionObserver` 可能直到组件进入视口才渲染/加载。配置数据后还会再次滚回组件并等待渲染。
 
-## 没有数据源也可以
+## 使用已有变量
 
 - 组件没有数据源能力：`data-bound = not-applicable`，不影响完整度。
-- 数据源可选、Scope 没映射：`data-bound = not-requested`，保留无数据状态，不影响完整度。
-- 数据源必填、Scope 没有获批映射：`blocked-missing-fixture`，结果为部分覆盖。
-- Scope 有映射：只选择映射的现有合成数据源，保存配置后再次进入可视区采集。
+- Scope 设置 `allowExistingModuleVariables: true` 后，优先保留当前兼容选择；否则选择 Widget 可见类型选择器提供的第一个启用兼容变量。
+- Scope 有精确 Fixture 映射时，该映射优先于自动选择。
+- 没有兼容变量：可选数据源记为 `not-requested`；必填数据源记为 `blocked-missing-fixture`，但继续采集其余状态和后续组件。
 
-Skill 不会随便选择第一个数据源，不会回退到真实业务数据，也不会创建、修改或删除数据源。
+Skill 不检查隐藏候选，不创建、修改或删除变量或数据源，也不保存变量名和渲染数据。
 
 ## HTML 范围
 

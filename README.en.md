@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-This Skill uses one consolidated authorization to enumerate every visible Widget in an approved Workshop, add widgets through real visible UI, scroll them into view, open configuration, bind only approved synthetic fixtures when applicable, enter preview, and save naturally loaded JS, CSS, WASM, fonts, images, and strictly approved Document HTML from Chrome's completed Network record.
+This Skill uses one consolidated authorization to enumerate every visible Widget in an approved Workshop, add widgets through real visible UI, scroll them into view, open configuration, use compatible variables already defined in the current Module, enter preview, and save naturally loaded JS, CSS, WASM, fonts, images, and strictly approved Document HTML from Chrome's completed Network record.
 
 It never retrieves a resource URL again, executes page-context scripts, transfers login credentials, or treats first observation as proof of source ownership.
 
@@ -43,14 +43,14 @@ https://workshop.example.com/module/edit/...
 
 Case ID: SEC-2026-001
 Allow deterministic CDP Capture pages, Widget addition/configuration, and autosave in this dedicated test Module.
-Use only my approved existing synthetic data sources; never create, modify, or delete a data source.
-First perform metadata-only host and entry-point discovery. Present exact hosts, actions, limits, and fixture mappings for one approval; then run automatically.
+Allow variables already defined in this Module when the Widget's visible typed selector marks them compatible; never create, modify, or delete variables or data sources.
+First perform metadata-only host and entry-point discovery. Present exact hosts, actions, limits, and the data-source policy for one approval; then run automatically.
 Capture js, css, wasm, font, image, and naturally loaded top-level/Widget-iframe Document HTML.
 ```
 
 ## Workflow
 
-Before approval, only `list_pages`, exact-page `select_page`, `take_snapshot`, and `list_network_requests` metadata discovery are used. Codex then presents the exact hosts, actions, limits, five states, and synthetic fixture mapping as a **single consolidated authorization**.
+Before approval, only `list_pages`, exact-page `select_page`, `take_snapshot`, and `list_network_requests` metadata discovery are used. Codex then presents the exact hosts, actions, limits, five states, and existing Module variable policy as a **single consolidated authorization**.
 
 After approval it automatically:
 
@@ -64,14 +64,14 @@ After approval it automatically:
 
 The viewport state is mandatory because canvas virtualization or IntersectionObserver rendering can delay natural loads until a Widget is visible. After data configuration, the workflow scrolls back to the Widget and waits for rendering again.
 
-## Data-source semantics
+## Existing Module variables
 
 - No data-source capability: `data-bound = not-applicable`; completeness is unaffected.
-- Optional source without a Scope mapping: `not-requested`; the no-data state remains valid.
-- Required source without an approved mapping: `blocked-missing-fixture`; coverage is partial.
-- Approved mapping: select only that visible existing synthetic fixture, accept authorized autosave, and capture the visible rendered state.
+- With `allowExistingModuleVariables: true`, keep a compatible current selection or use the first enabled compatible variable exposed by the Widget's visible typed selector.
+- An exact fixture mapping overrides automatic selection for that Widget.
+- With no compatible variable, an optional source is `not-requested`; a required source is `blocked-missing-fixture`. Both continue with remaining states and Widgets.
 
-There is no first-option selection, real-data fallback, or data-source creation/modification/deletion.
+The workflow never inspects hidden candidates, creates/modifies/deletes variables or data sources, or persists variable names or rendered data.
 
 ## HTML boundary
 

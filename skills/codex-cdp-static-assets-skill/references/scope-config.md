@@ -4,7 +4,7 @@ The JSON Scope is both the one-time authorization boundary and an audit input. M
 
 ## Required authorization
 
-Record the case ID, exact page host/Module, test account, time and traffic ceilings, stop contact, asset types, autosave permission, capture-page permission, and exact existing synthetic fixtures. The authorization permits only visible Workshop edits needed for capture.
+Record the case ID, exact page host/Module, test account, time and traffic ceilings, stop contact, asset types, autosave permission, capture-page permission, and whether current Module variables may be selected. Exact synthetic fixtures may still be approved as per-Widget overrides. The authorization permits only visible Workshop edits needed for capture.
 
 ```json
 {
@@ -32,6 +32,7 @@ Record the case ID, exact page host/Module, test account, time and traffic ceili
     "mode": "full-catalog",
     "allowAutosave": true,
     "allowCreateCapturePages": true,
+    "allowExistingModuleVariables": true,
     "captureStateScreenshots": true,
     "maxWidgetsPerPage": 8,
     "states": [
@@ -69,18 +70,23 @@ node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
 
 `maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix. Automated Scope also requires a non-empty Case ID, an exact query-free `approvedPageUrl` whose final path segment equals `moduleId`, plus test account, a currently active increasing authorization window, and stop contact. Expired or not-yet-active Scope is rejected. These fields let the runner stop on same-host Module drift; account/contact values are never copied into provenance.
 
-## Synthetic fixtures
+## Existing Module variables and fixture overrides
 
-`fixtureProfiles` names existing visible synthetic test options. `widgetFixtureMap` may reference only those names. Never choose the first available option, add a real-data fallback, or create/modify/delete any data source.
+`allowExistingModuleVariables: true` authorizes selecting variables already defined in the approved Module. Keep the current selection when the Widget's visible typed selector accepts it; otherwise choose the first enabled compatible option presented by that selector. Never inspect hidden candidates or create, modify, or delete variables or data sources.
+
+`fixtureProfiles` names exact visible test options and `widgetFixtureMap` may reference only those names. A mapped fixture overrides automatic existing-variable selection for that Widget.
 
 For `data-bound`:
 
 - no data-source capability: `not-applicable`, `required: false`;
-- optional and no mapping: `not-requested`, `required: false`;
-- required and no mapping: `blocked-missing-fixture`, partial coverage;
-- mapping present: select the exact `visibleOption`, save through approved autosave, return to viewport, and capture the rendered state.
+- mapping present: select the exact `visibleOption`;
+- no mapping and existing Module variables are authorized: keep or select a visibly compatible existing variable;
+- no compatible variable for an optional source: `not-requested`, `required: false`;
+- no compatible variable for a required source: `blocked-missing-fixture`, partial coverage, then continue the remaining states and Widgets.
 
-Provenance retains only policy fields, Profile names, and mapped widget keys—not visible option text or data.
+After a successful selection, save through approved autosave, return to the viewport, and capture the rendered state.
+
+Provenance retains only the existing-variable authorization boolean, Profile names, and mapped widget keys—not variable names, visible option text, or rendered data.
 
 ## Exact hosts
 

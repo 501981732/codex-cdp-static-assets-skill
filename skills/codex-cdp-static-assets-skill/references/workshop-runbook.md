@@ -9,7 +9,7 @@ Automatically exercise every visible Widget and its naturally triggered loading 
 1. Connect to the signed-in default Chrome with MCP `--autoConnect` and select the unique exact `pageHosts` page.
 2. Keep snapshots and page-list results in memory. Use `take_snapshot` to verify the approved Module and visible Add Widget entry point.
 3. Use `list_network_requests` without body reads to list exact current hosts and statuses.
-4. Present the exact host candidates, automation mode, autosave/page-creation actions, five states, optional element-level screenshots, asset limits, and synthetic fixture Profiles as a **single consolidated authorization**.
+4. Present the exact host candidates, automation mode, autosave/page-creation actions, five states, optional element-level screenshots, asset limits, existing Module variable policy, and optional fixture overrides as a **single consolidated authorization**.
 5. Write and validate `capture-scope.json`. Do not mutate before approval.
 
 ## Phase 2: baseline
@@ -61,7 +61,7 @@ node scripts/automation-policy.mjs resume \
   --visible-matches 1
 ```
 
-One match resumes missing states. More than one records `blocked-existing-instance-ambiguous` and stops. An already-added widget with no required fixture mapping must not be added again.
+One match resumes missing states. More than one records `blocked-existing-instance-ambiguous` and stops. An already-added Widget with no compatible variable must not be added again; record the data state and continue its remaining missing states.
 
 ## Phase 5: per-widget state matrix
 
@@ -78,7 +78,7 @@ Then run states in this order:
 1. `editor-mounted`: use `click` or visible `drag` to add; verify the unique visible instance.
 2. `viewport-visible`: scroll the canvas until the instance is visible. This step is mandatory even if editor-mounted loaded assets, because viewport virtualization may defer rendering.
 3. `config-opened`: open the visible configuration UI and wait for it to settle.
-4. `data-bound`: inspect visible capability/requiredness. Apply the exact Scope semantics for `not-applicable`, `not-requested`, mapped synthetic fixture, or `blocked-missing-fixture`. Use `fill` only for authorized visible configuration fields and `click` only the mapped option. Autosave is the only allowed persistence.
+4. `data-bound`: inspect visible capability/requiredness. Prefer an exact mapped fixture. Otherwise, when `allowExistingModuleVariables` is true, keep a compatible current selection or choose the first enabled option exposed by the visible typed variable selector. If none exists, record `not-requested` for an optional source or `blocked-missing-fixture` for a required source and continue. Use `fill` only for authorized visible configuration fields. Autosave is the only allowed persistence.
 5. `preview-visible`: enter preview, scroll the instance into view, and wait for visible rendering.
 
 After configuration, scroll back to the widget before capture so configuration-driven lazy rendering is not missed.
@@ -142,4 +142,4 @@ Document HTML means an observed top-level or Widget iframe network document. It 
 
 ## Stop without automatic retry
 
-Stop on unknown hosts, page/Module drift, authentication challenges, status stops, account warnings, unexpected writes, ambiguous widget identity/add/resume, missing required fixture mapping, capacity without authority, traffic/time limits, or owner/SOC instruction. Local staging-path errors may be corrected without new network traffic; browser body eviction is not retried.
+Stop on unknown hosts, page/Module drift, authentication challenges, status stops, account warnings, unexpected writes, ambiguous widget identity/add/resume, capacity without authority, traffic/time limits, or owner/SOC instruction. Missing compatible variables remain component-level partial coverage and do not stop traversal. Local staging-path errors may be corrected without new network traffic; browser body eviction is not retried.

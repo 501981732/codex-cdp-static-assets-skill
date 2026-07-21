@@ -27,7 +27,7 @@
 - 允许自动执行的 UI 操作；
 - 是否允许保存组件或配置面板的状态截图；
 - 要覆盖的 Widget 状态矩阵；
-- 允许使用的现有合成测试数据源，以及 Widget 到数据源 Profile 的精确映射；
+- 是否允许使用当前 Module 已有且 Widget 可见类型选择器明确兼容的变量，以及可选的 Widget 到 Fixture Profile 精确覆盖映射；
 - 禁止动作和停止条件。
 
 发现阶段可以选择唯一获批页面、在内存中检查无障碍快照并列出 Network 元数据，但不能留存响应正文。系统应一次性展示全部精确主机候选和自动化动作集合。用户批准后，不再设置逐 Widget 检查点。
@@ -36,10 +36,13 @@
 
 自动化 Workshop 采集按实际执行顺序默认覆盖 `editor-mounted`、`viewport-visible`、`config-opened`、`data-bound` 和 `preview-visible`。对每个状态，仅在可见 Widget UI 确实支持时执行；否则记录为 `not-applicable`，不得推测或暴露隐藏配置、数据源或预览路由。
 
-Scope 使用显式数据源配置，不得根据候选顺序猜测：
+Scope 可以授权使用当前 Module 已有变量，并保留精确 Fixture 覆盖配置：
 
 ```json
 {
+  "automation": {
+    "allowExistingModuleVariables": true
+  },
   "fixtureProfiles": {
     "object-set-default": {
       "kind": "object-set",
@@ -52,7 +55,7 @@ Scope 使用显式数据源配置，不得根据候选顺序猜测：
 }
 ```
 
-`widgetFixtureMap` 只能引用 `fixtureProfiles` 中已获批准的现有合成测试数据源。自动化流程可以选择并保存这些配置，但不得创建、修改或删除数据源本身，不得选择任意第一个候选项，也不得把真实业务数据源作为回退项。
+`allowExistingModuleVariables: true` 表示用户已授权组件使用当前 Module 已有变量。自动化流程优先保留 Widget 类型选择器中的当前兼容选择；否则选择该可见类型选择器展示的第一个启用兼容变量。`widgetFixtureMap` 仍可引用 `fixtureProfiles` 作为单个 Widget 的精确覆盖，且优先级更高。不得检查隐藏候选，不得创建、修改或删除变量或数据源。
 
 ## 自动化 UI 边界
 
@@ -63,7 +66,7 @@ Scope 使用显式数据源配置，不得根据候选顺序猜测：
 - 点击、搜索、滚动和键盘导航；
 - 打开 Add Widget 并选择可见目录项；
 - 添加 Widget 必须使用拖放时执行拖放；
-- 打开 Widget 配置、选择 Scope 映射的合成测试数据源并允许自动保存；
+- 打开 Widget 配置、按 Scope 选择兼容的现有 Module 变量或精确 Fixture，并允许自动保存；
 - 打开预览，并滚动 Widget 进入可视区；
 - 等待可见状态和 Network 稳定。
 
@@ -73,7 +76,7 @@ Scope 使用显式数据源配置，不得根据候选顺序猜测：
 
 - `evaluate_script`、页面上下文 JavaScript、隐藏路由发现、DOM/源码提取或内部注册表枚举；
 - 发布、执行 Action 或 Workflow、导出、修改权限、生产回写或删除业务数据；
-- 创建、修改或删除数据源，或选择 Scope 未明确映射的数据源；
+- 创建、修改或删除变量/数据源，或在未授权 `allowExistingModuleVariables` 时自动选择 Module 变量；
 - 添加结果不明确时盲目重试；
 - 清理或禁用缓存、绕过 Service Worker、拦截请求、重放 URL、猜测 Chunk 或探测 sourcemap；
 - 提取 Cookie、Token、密码、请求正文或浏览器 Profile。
@@ -115,7 +118,7 @@ HTML 只有同时满足以下条件时才允许保留：
    - `editor-mounted`：添加完成后等待编辑器结构稳定并采集；
    - `viewport-visible`：滚动并使 Widget 完整进入画布可视区，等待可见渲染后采集；
    - `config-opened`：打开可见配置面板，等待配置相关资源加载后采集；
-   - `data-bound`：若可见配置表明数据源为必填，则按 `widgetFixtureMap` 选择已批准 Profile、保存配置、重新滚动到可视区，等待数据渲染后采集；若组件没有数据源能力则记录 `not-applicable`；若数据源可选且 Scope 没有映射，则保留已采集的无数据状态、把 `data-bound` 记录为 `not-requested`，不影响完整度；若数据源必填但没有映射，则记录 `blocked-missing-fixture`；若数据源可选且 Scope 提供了映射，则额外执行并覆盖 `data-bound`；
+   - `data-bound`：优先按 `widgetFixtureMap` 选择精确 Profile；没有映射且 `allowExistingModuleVariables` 为 true 时，保留当前兼容选择或选择可见类型选择器中的第一个启用兼容变量，保存配置、重新滚动到可视区并等待数据渲染后采集；组件没有数据源能力记录 `not-applicable`；没有兼容变量时，可选数据源记录 `not-requested`，必填数据源记录 `blocked-missing-fixture`，两者都继续其余状态和后续 Widget；
    - `preview-visible`：进入可见预览或 Runtime 状态，将 Widget 滚动到可视区，等待渲染后采集；不支持预览时记录 `not-applicable`；
    - 每个状态都使用独立 Marker，例如 `widget:object-table:a1b2c3d4:data-bound`；
    - 每个状态在运行超时时间内，等待 Network 请求身份和状态连续两次轮询保持不变；
@@ -182,7 +185,7 @@ HTML 只有同时满足以下条件时才允许保留：
 
 始终输出 baseline 记录。每个尝试过的规范 Widget Key 都必须输出一条组件记录，包括失败尝试。合并时按 `(capturePage, widgetKey)` 汇总组件记录；按 `(sha256, 脱敏 URL)` 去重资源；保留最早的首次观察 Marker；合并全部 `bodyUnavailable` 条目；保留所有不同失败；按 `(at, sourceRun)` 追加每次尝试。
 
-汇总状态必须确定性计算：每个要求状态只要任一次成功采集即为 `captured`；否则，必填数据源缺少获批映射时为 `blocked-missing-fixture`，任一次执行失败则为 `failed`，可见 UI 明确不支持时为 `not-applicable`。组件没有数据源能力时，`data-bound` 不进入 `requiredStates`；数据源可选且 Scope 未映射时，`data-bound` 为 `not-requested`，同样不进入 `requiredStates`。`coveredStates` 只包含 `captured`，`blockedStates` 包含所有 `blocked-*` 和 `failed` 状态。全部适用的要求状态均为 `captured` 且不存在阻塞时，`coverageStatus` 才能是 `complete`；否则为 `partial`。即使后续尝试成功，历史失败仍保留在 `failures` 和 `attempts` 中。组件按 `widgetKey` 排序，资源按 `(kind, URL, sha256)` 排序，以确保输出稳定。
+汇总状态必须确定性计算：每个要求状态只要任一次成功采集即为 `captured`；否则，必填数据源没有兼容变量时为 `blocked-missing-fixture`，任一次执行失败则为 `failed`，可见 UI 明确不支持时为 `not-applicable`。组件没有数据源能力时，`data-bound` 不进入 `requiredStates`；可选数据源没有兼容变量时，`data-bound` 为 `not-requested`，同样不进入 `requiredStates`。`coveredStates` 只包含 `captured`，`blockedStates` 包含所有 `blocked-*` 和 `failed` 状态。全部适用的要求状态均为 `captured` 且不存在阻塞时，`coverageStatus` 才能是 `complete`；否则为 `partial`。组件级数据绑定缺口不停止目录遍历。即使后续尝试成功，历史失败仍保留在 `failures` 和 `attempts` 中。组件按 `widgetKey` 排序，资源按 `(kind, URL, sha256)` 排序，以确保输出稳定。
 
 证据分类如下：
 
@@ -190,7 +193,7 @@ HTML 只有同时满足以下条件时才允许保留：
 - `first-observed`：首次在该 Widget Marker 下出现；
 - `body-unavailable`：观察到请求，但 Chrome 已无法提供响应正文；
 - `failed`：UI 或采集失败，并记录原因。
-- `blocked-missing-fixture`：Widget 明确需要数据源，但 Scope 没有提供获批 Profile 映射。
+- `blocked-missing-fixture`：Widget 明确需要数据源，但当前 Module 没有兼容变量且 Scope 没有提供精确 Profile 覆盖；仅阻塞该状态，不停止目录遍历。
 - `blocked-page-capacity`：单页模式达到上限且未授权创建下一采集页。
 - `blocked-existing-instance-ambiguous`：恢复时无法通过已记录可见信息唯一定位现有 Widget 实例。
 

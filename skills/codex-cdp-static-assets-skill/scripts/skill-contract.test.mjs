@@ -41,6 +41,7 @@ test('skill defines one-authorization automated widget capture with explicit bou
     'viewport-visible',
     'config-opened',
     'data-bound',
+    'allowExistingModuleVariables',
     'preview-visible',
     'component-assets.json',
     'text/html',

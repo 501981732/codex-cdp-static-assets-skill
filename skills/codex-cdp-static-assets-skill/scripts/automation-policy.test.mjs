@@ -31,6 +31,7 @@ function validInput(overrides = {}) {
       mode: 'full-catalog',
       allowAutosave: true,
       allowCreateCapturePages: true,
+      allowExistingModuleVariables: true,
       maxWidgetsPerPage: 8,
       states,
       ...overrides.automation,
@@ -43,6 +44,7 @@ test('normalizes and freezes a fully authorized automation policy', () => {
   assert.equal(policy.enabled, true);
   assert.equal(policy.mode, 'full-catalog');
   assert.equal(policy.maxWidgetsPerPage, 8);
+  assert.equal(policy.allowExistingModuleVariables, true);
   assert.deepEqual(policy.states, states);
   assert.equal(Object.isFrozen(policy), true);
   assert.equal(Object.isFrozen(policy.states), true);
@@ -59,6 +61,7 @@ test('rejects incomplete or unsafe automation authorization', () => {
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { mode: 'other' } })), /mode/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { states: ['editor-mounted', 'hidden-state'] } })), /state/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { captureStateScreenshots: 'yes' } })), /captureStateScreenshots/);
+  assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowExistingModuleVariables: 'yes' } })), /allowExistingModuleVariables/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ fixtureProfiles: { broken: { kind: 'synthetic' } } })), /visibleOption/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ widgetFixtureMap: { 'tables/object-table/v1': 'missing' } })), /unknown fixture profile/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ fallbackDataSource: 'production' })), /real data source fallback/);
@@ -111,6 +114,10 @@ test('plans baseline, capacity, and state-level resume deterministically', () =>
     action: 'resume-existing',
     missingStates: ['viewport-visible', 'config-opened', 'data-bound', 'preview-visible'],
     dataState: 'blocked-missing-fixture',
+  });
+  assert.deepEqual(planResume({ completedStates: ['editor-mounted'], added: true, existingVariableAvailable: true, visibleMatches: 1 }), {
+    action: 'resume-existing',
+    missingStates: ['viewport-visible', 'config-opened', 'data-bound', 'preview-visible'],
   });
   assert.deepEqual(planResume({ completedStates: [], added: true, fixtureAvailable: true, visibleMatches: 2 }), {
     action: 'blocked',

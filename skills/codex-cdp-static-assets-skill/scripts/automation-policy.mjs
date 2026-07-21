@@ -57,6 +57,9 @@ export function normalizeAutomationPolicy(input = {}) {
   if (automation.captureStateScreenshots !== undefined && typeof automation.captureStateScreenshots !== 'boolean') {
     throw new Error('Automation captureStateScreenshots must be a boolean');
   }
+  if (automation.allowExistingModuleVariables !== undefined && typeof automation.allowExistingModuleVariables !== 'boolean') {
+    throw new Error('Automation allowExistingModuleVariables must be a boolean');
+  }
 
   const fixtureProfiles = input.fixtureProfiles || {};
   if (!fixtureProfiles || Array.isArray(fixtureProfiles) || typeof fixtureProfiles !== 'object') throw new Error('fixtureProfiles must be an object');
@@ -75,6 +78,7 @@ export function normalizeAutomationPolicy(input = {}) {
     mode: automation.mode,
     allowAutosave: true,
     allowCreateCapturePages: automation.allowCreateCapturePages,
+    allowExistingModuleVariables: automation.allowExistingModuleVariables === true,
     captureStateScreenshots: automation.captureStateScreenshots === true,
     maxWidgetsPerPage: automation.maxWidgetsPerPage,
     states: Object.freeze(normalizedStates),
@@ -194,7 +198,7 @@ export function createNetworkStabilityTracker(initial = {}) {
   };
 }
 
-export function planResume({ completedStates = [], added = false, fixtureAvailable = false, visibleMatches = 0 }) {
+export function planResume({ completedStates = [], added = false, fixtureAvailable = false, existingVariableAvailable = false, visibleMatches = 0 }) {
   if (!Number.isInteger(visibleMatches) || visibleMatches < 0) throw new Error('visibleMatches must be a non-negative integer');
   if (visibleMatches > 1) return { action: 'blocked', reason: 'blocked-existing-instance-ambiguous' };
   const missingStates = COMPONENT_STATES.filter((state) => !completedStates.includes(state));
@@ -202,7 +206,7 @@ export function planResume({ completedStates = [], added = false, fixtureAvailab
   if (visibleMatches === 0 && added) return { action: 'blocked', reason: 'blocked-existing-instance-ambiguous' };
   if (visibleMatches === 0) return { action: 'add-widget', missingStates };
   const result = { action: 'resume-existing', missingStates };
-  if (missingStates.includes('data-bound') && !fixtureAvailable) result.dataState = 'blocked-missing-fixture';
+  if (missingStates.includes('data-bound') && !fixtureAvailable && !existingVariableAvailable) result.dataState = 'blocked-missing-fixture';
   return result;
 }
 
