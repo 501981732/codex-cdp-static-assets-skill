@@ -77,7 +77,7 @@ Provenance retains only the variable-automation authorization—not variable nam
 
 ## Exact hosts
 
-Start discovery with `pageHosts`. List all current request metadata, then present exact asset/network candidates in the single consolidated authorization. Do not use allow-any or broad wildcard approval. Any later unknown host stops the run and requires a new authorization boundary.
+Start discovery with `pageHosts`. List all current request metadata, then present exact asset/network candidates in the single consolidated authorization. Do not use allow-any or broad wildcard approval. Ignore `chrome-extension://` local browser requests without retaining or authorizing them. Any later unknown HTTP/HTTPS host stops the run and requires a new authorization boundary.
 
 Document HTML additionally requires its response hostname to appear as an exact non-wildcard approved host.
 

@@ -83,26 +83,27 @@ test('supports explicitly disabled automation without fixture authorization', ()
 test('builds stable widget identities and deduplicates cross-snapshot observations', () => {
   const entry = { label: 'Object Table', category: 'Tables', versionOrType: 'v1' };
   assert.equal(canonicalWidgetKey(entry), 'tables/object-table/v1');
+  assert.equal(canonicalWidgetKey({ label: 'Object Table' }), 'uncategorized/object-table/default');
   assert.deepEqual(buildCatalogQueue([
     { snapshotId: 's1', entries: [entry] },
     { snapshotId: 's2', entries: [entry] },
   ]).map((item) => item.widgetKey), ['tables/object-table/v1']);
-  assert.throws(() => buildCatalogQueue([
+  assert.deepEqual(buildCatalogQueue([
     { snapshotId: 's1', entries: [entry, { ...entry }] },
-  ]), /catalog-identity-ambiguity/);
+  ]), []);
   assert.match(markerForWidget('tables/object-table/v1', 'data-bound'), /^widget:object-table:[a-f0-9]{8}:data-bound$/);
 });
 
 test('requires bottom discovery plus two consecutive snapshots without a new widget', () => {
   const tracker = createCatalogCompletionTracker();
-  assert.deepEqual(tracker.update([{ label: 'Table', category: 'Data', versionOrType: 'v1' }], false), { complete: false, stableCount: 0, totalKeys: 1 });
-  assert.deepEqual(tracker.update([{ label: 'Table', category: 'Data', versionOrType: 'v1' }], true), { complete: false, stableCount: 1, totalKeys: 1 });
-  assert.deepEqual(tracker.update([{ label: 'Table', category: 'Data', versionOrType: 'v1' }], true), { complete: true, stableCount: 2, totalKeys: 1 });
-  assert.deepEqual(tracker.update([{ label: 'Chart', category: 'Data', versionOrType: 'v1' }], true), { complete: false, stableCount: 0, totalKeys: 2 });
-  assert.throws(() => tracker.update([
+  assert.deepEqual(tracker.update([{ label: 'Table', category: 'Data', versionOrType: 'v1' }], false), { complete: false, stableCount: 0, totalKeys: 1, ambiguousKeys: [] });
+  assert.deepEqual(tracker.update([{ label: 'Table', category: 'Data', versionOrType: 'v1' }], true), { complete: false, stableCount: 1, totalKeys: 1, ambiguousKeys: [] });
+  assert.deepEqual(tracker.update([{ label: 'Table', category: 'Data', versionOrType: 'v1' }], true), { complete: true, stableCount: 2, totalKeys: 1, ambiguousKeys: [] });
+  assert.deepEqual(tracker.update([{ label: 'Chart', category: 'Data', versionOrType: 'v1' }], true), { complete: false, stableCount: 0, totalKeys: 2, ambiguousKeys: [] });
+  assert.deepEqual(tracker.update([
     { label: 'Chart', category: 'Data', versionOrType: 'v1' },
     { label: 'Chart', category: 'Data', versionOrType: 'v1' },
-  ], true), /catalog-identity-ambiguity/);
+  ], true), { complete: false, stableCount: 1, totalKeys: 1, ambiguousKeys: ['data/chart/v1'] });
 });
 
 test('requires baseline plus two identical network observations and resets on change', () => {
@@ -152,15 +153,16 @@ test('CLI state files retain only canonical keys or request fingerprints', async
   ])]);
   const catalog = JSON.parse(await readFile(catalogState, 'utf8'));
   const network = JSON.parse(await readFile(networkState, 'utf8'));
-  assert.deepEqual(Object.keys(catalog).sort(), ['atBottom', 'keys', 'stableCount']);
+  assert.deepEqual(Object.keys(catalog).sort(), ['ambiguousKeys', 'atBottom', 'keys', 'stableCount']);
   assert.deepEqual(catalog.keys, ['tables/object-table/v1']);
+  assert.deepEqual(catalog.ambiguousKeys, []);
   assert.deepEqual(Object.keys(network).sort(), ['fingerprint', 'stableCount']);
   assert.equal(JSON.stringify([catalog, network]).includes('secret'), false);
 });
 
-test('catalog-update CLI stops on indistinguishable same-snapshot widgets', async () => {
+test('catalog-update CLI records indistinguishable same-snapshot widgets and continues unique coverage', async () => {
   const root = await mkdtemp(join(tmpdir(), 'automation-policy-ambiguity-'));
-  await assert.rejects(runAutomationPolicyCli([
+  const first = await runAutomationPolicyCli([
     'catalog-update',
     '--state', join(root, 'catalog-state.json'),
     '--entries-json', JSON.stringify([
@@ -168,14 +170,16 @@ test('catalog-update CLI stops on indistinguishable same-snapshot widgets', asyn
       { label: 'Chart', category: 'Data', versionOrType: 'v1' },
     ]),
     '--at-bottom', 'false',
-  ]), /catalog-identity-ambiguity/);
-  await assert.rejects(runAutomationPolicyCli([
+  ]);
+  assert.deepEqual(first.ambiguousKeys, ['data/chart/v1']);
+  const second = await runAutomationPolicyCli([
     'catalog-update', '--state', join(root, 'mixed-state.json'),
     '--entries-json', JSON.stringify([
       'data/chart/v1',
       { label: 'Chart', category: 'Data', versionOrType: 'v1' },
     ]), '--at-bottom', 'false',
-  ]), /catalog-identity-ambiguity/);
+  ]);
+  assert.deepEqual(second.ambiguousKeys, ['data/chart/v1']);
 });
 
 test('resume CLI fails closed without a visible match count', async () => {

@@ -83,6 +83,8 @@ Catalog icons and preview images are recorded as shared `baseline:catalog` resou
 
 `firstObservedAssets` means “first seen after operating this Widget,” not “owned only by this Widget.” If a resource came from cache or Chrome did not retain its body, the report marks that clearly and never fetches it again.
 
+Capture can continue when the catalog shows only Widget names; only same-name entries that remain indistinguishable in the visible UI are skipped. Local browser `chrome-extension://` requests are ignored and never require extra authorization.
+
 ## Important boundaries
 
 - The Skill operates only on the exact authorized Workshop host and Module. It stops on login expiry, CAPTCHA, an unknown host, or an unexpected write.

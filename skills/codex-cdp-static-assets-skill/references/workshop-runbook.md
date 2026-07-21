@@ -43,7 +43,7 @@ node scripts/automation-policy.mjs catalog-update \
   --at-bottom true
 ```
 
-Canonical identity is visible category/label/version-or-type. The same key in later snapshots is one Widget. Two indistinguishable entries with the same key in one snapshot stop as `catalog-identity-ambiguity`.
+Canonical identity always requires a visible label. Add visible category and version/type when they exist; otherwise use stable `uncategorized` and `default` placeholders. The same key in later snapshots is one Widget. When two entries remain indistinguishable in one snapshot, record `catalog-identity-ambiguity`, skip only that key, and continue the unique Widgets.
 
 Keep the visible catalog queue separate from the baseline registry. Use the registry to detect coverage gaps and support later reverse engineering; use only the visible catalog to decide what can be added through the authorized UI.
 
@@ -111,7 +111,7 @@ Attempt IDs are unique within the run and use `<run>:<state>:<monotonic-number>`
 
 ## Phase 6: request ingestion at resource-triggering boundaries
 
-1. Call `list_network_requests` for all types and check hosts/statuses first after baseline, Catalog opening, Widget addition, successful data binding, and preview entry.
+1. Call `list_network_requests` for all types and check hosts/statuses first after baseline, Catalog opening, Widget addition, successful data binding, and preview entry. Ignore `chrome-extension://` local browser requests without reading, retaining, or authorizing them; unknown HTTP/HTTPS hosts still stop the run.
 2. If the action produced new request IDs or statuses, feed only `(requestId,status)` to `network-update`; three identical observations are stable. If no static request changed, do not add a redundant stabilization loop.
 3. For each approved completed asset, call `get_network_request` with `reqid` and `responseFilePath` under `os.tmpdir()`.
 4. Import immediately with the current widget/state marker. Never set `requestFilePath` and never refetch a URL.
@@ -140,4 +140,4 @@ Document HTML means an observed top-level or Widget iframe network document. It 
 
 ## Stop without automatic retry
 
-Stop on unknown hosts, page/Module drift, authentication challenges, status stops, account warnings, unexpected writes, ambiguous widget identity/add/resume, capacity without authority, traffic/time limits, or owner/SOC instruction. Missing compatible variables remain component-level partial coverage and do not stop traversal. Local staging-path errors may be corrected without new network traffic; browser body eviction is not retried.
+Stop on unknown HTTP/HTTPS hosts, page/Module drift, authentication challenges, status stops, account warnings, unexpected writes, ambiguous added-instance resume, capacity without authority, traffic/time limits, or owner/SOC instruction. A catalog identity ambiguity blocks only that indistinguishable key; missing compatible variables remain component-level partial coverage and do not stop traversal. Local staging-path errors may be corrected without new network traffic; browser body eviction is not retried.

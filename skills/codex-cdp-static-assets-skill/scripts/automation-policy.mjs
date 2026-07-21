@@ -127,23 +127,32 @@ function slug(value) {
 }
 
 export function canonicalWidgetKey(entry) {
-  for (const field of ['label', 'category', 'versionOrType']) {
-    if (typeof entry?.[field] !== 'string' || !entry[field].trim()) throw new Error(`Widget identity requires ${field}`);
-  }
-  return `${slug(entry.category)}/${slug(entry.label)}/${slug(entry.versionOrType)}`;
+  if (typeof entry?.label !== 'string' || !entry.label.trim()) throw new Error('Widget identity requires label');
+  const category = typeof entry.category === 'string' && entry.category.trim() ? entry.category : 'uncategorized';
+  const versionOrType = typeof entry.versionOrType === 'string' && entry.versionOrType.trim() ? entry.versionOrType : 'default';
+  return `${slug(category)}/${slug(entry.label)}/${slug(versionOrType)}`;
 }
 
 export function buildCatalogQueue(snapshots) {
   if (!Array.isArray(snapshots)) throw new Error('Catalog snapshots must be an array');
   const queue = new Map();
+  const ambiguousKeys = new Set();
   for (const snapshot of snapshots) {
     if (typeof snapshot?.snapshotId !== 'string' || !Array.isArray(snapshot.entries)) throw new Error('Catalog snapshot requires snapshotId and entries');
-    const seenInSnapshot = new Set();
+    const entriesByKey = new Map();
     for (const entry of snapshot.entries) {
       const widgetKey = canonicalWidgetKey(entry);
-      if (seenInSnapshot.has(widgetKey)) throw new Error(`catalog-identity-ambiguity: ${snapshot.snapshotId}:${widgetKey}`);
-      seenInSnapshot.add(widgetKey);
-      if (!queue.has(widgetKey)) queue.set(widgetKey, Object.freeze({ ...entry, widgetKey }));
+      const items = entriesByKey.get(widgetKey) || [];
+      items.push(entry);
+      entriesByKey.set(widgetKey, items);
+    }
+    for (const [widgetKey, items] of entriesByKey) {
+      if (items.length > 1) {
+        ambiguousKeys.add(widgetKey);
+        queue.delete(widgetKey);
+      } else if (!ambiguousKeys.has(widgetKey) && !queue.has(widgetKey)) {
+        queue.set(widgetKey, Object.freeze({ ...items[0], widgetKey }));
+      }
     }
   }
   return [...queue.values()];
@@ -171,21 +180,27 @@ export function planCapturePage({ count, maxWidgetsPerPage, allowCreateCapturePa
 
 export function createCatalogCompletionTracker(initial = {}) {
   const keys = new Set(Array.isArray(initial.keys) ? initial.keys : []);
+  const ambiguousKeys = new Set(Array.isArray(initial.ambiguousKeys) ? initial.ambiguousKeys : []);
   let atBottom = initial.atBottom === true;
   let stableCount = Number.isInteger(initial.stableCount) ? initial.stableCount : 0;
   return {
     update(entries, nextAtBottom) {
       if (!Array.isArray(entries)) throw new Error('Catalog observation entries must be an array');
-      const observedKeys = entries.map((entry) => {
-        if (typeof entry === 'string' && entry.trim()) return entry.trim();
-        return canonicalWidgetKey(entry);
-      });
-      if (new Set(observedKeys).size !== observedKeys.length) {
-        throw new Error('catalog-identity-ambiguity: current-observation');
+      const observedByKey = new Map();
+      for (const entry of entries) {
+        const key = typeof entry === 'string' && entry.trim() ? entry.trim() : canonicalWidgetKey(entry);
+        observedByKey.set(key, (observedByKey.get(key) || 0) + 1);
+      }
+      const observedKeys = [...observedByKey.keys()];
+      for (const [key, count] of observedByKey) {
+        if (count > 1) {
+          ambiguousKeys.add(key);
+          keys.delete(key);
+        }
       }
       let added = 0;
       for (const key of observedKeys) {
-        if (!keys.has(key)) {
+        if (!ambiguousKeys.has(key) && !keys.has(key)) {
           keys.add(key);
           added += 1;
         }
@@ -193,10 +208,10 @@ export function createCatalogCompletionTracker(initial = {}) {
       atBottom = nextAtBottom === true;
       if (!atBottom || added > 0) stableCount = 0;
       else stableCount += 1;
-      return { complete: atBottom && stableCount >= 2, stableCount, totalKeys: keys.size };
+      return { complete: atBottom && stableCount >= 2, stableCount, totalKeys: keys.size, ambiguousKeys: [...ambiguousKeys].sort() };
     },
     snapshot() {
-      return { keys: [...keys].sort(), atBottom, stableCount };
+      return { keys: [...keys].sort(), ambiguousKeys: [...ambiguousKeys].sort(), atBottom, stableCount };
     },
   };
 }

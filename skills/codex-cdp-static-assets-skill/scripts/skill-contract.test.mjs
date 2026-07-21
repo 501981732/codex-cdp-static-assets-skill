@@ -46,6 +46,7 @@ test('skill defines one-authorization automated widget capture with explicit bou
     'component-assets.json',
     'text/html',
     'body-unavailable',
+    'chrome-extension://',
   ]) {
     assert.equal(combined.includes(required), true, `missing automated capture contract: ${required}`);
   }

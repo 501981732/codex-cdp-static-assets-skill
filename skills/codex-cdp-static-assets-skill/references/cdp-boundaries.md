@@ -29,7 +29,7 @@ Never use `evaluate_script`. Never set `requestFilePath`.
 
 ## Response-body rule
 
-`list_network_requests` and `get_network_request` inspect Chrome's current local Network record and must not cause a new HTTP request. Always inspect exact hosts and stop statuses before body access. Stage a response only below the runtime value of `os.tmpdir()`, import immediately, and request importer cleanup.
+`list_network_requests` and `get_network_request` inspect Chrome's current local Network record and must not cause a new HTTP request. Ignore `chrome-extension://` local browser requests without body access; inspect exact HTTP/HTTPS hosts and stop statuses before body access. Stage a response only below the runtime value of `os.tmpdir()`, import immediately, and request importer cleanup.
 
 If Chrome returns no body, append `body-unavailable`. A local staging-path failure may retry the same request ID after correcting the local path; a true browser body gap is final for that observation.
 
@@ -41,11 +41,11 @@ HTML is eligible only for an approved `Document` response with exact `text/html`
 
 All mutation must be observable through snapshots and visible controls. Never infer success from a click alone. Verify the visible widget instance before continuing. If the Add Widget result or resume target is ambiguous, stop rather than adding again.
 
-Canonical widget identity is derived only from visible label, category, and version/type. Accessibility snapshots stay in memory; state files retain only canonical keys, counters, and request ID/status fingerprints.
+Canonical widget identity requires a visible label; visible category and version/type refine it when available. If a key is still indistinguishable, skip only that key and retain the ambiguity record. Accessibility snapshots stay in memory; state files retain only canonical keys, ambiguity keys, counters, and request ID/status fingerprints.
 
 ## Stop conditions
 
-Stop before further body reads or UI mutation on an unknown host, page/Module drift, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, unexpected write, unapproved variable handling, traffic/time ceiling, or owner/SOC instruction. A Widget with no permitted compatible variable path is a component-level partial result and does not stop catalog traversal.
+Ignore `chrome-extension://` local browser noise without body reads. Stop before further body reads or UI mutation on an unknown HTTP/HTTPS host, page/Module drift, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, unexpected write, unapproved variable handling, traffic/time ceiling, or owner/SOC instruction. A Widget with no permitted compatible variable path is a component-level partial result and does not stop catalog traversal.
 
 ## Data handling
 
