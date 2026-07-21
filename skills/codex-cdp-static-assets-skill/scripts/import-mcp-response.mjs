@@ -47,6 +47,7 @@ export function classifyMcpResource({ resourceType = '', mimeType = '', url = ''
 
 function extensionFor(kind, resourceUrl, mimeType = '') {
   const known = new Set(['.js', '.mjs', '.css', '.wasm', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif', '.html', '.xhtml']);
+  if (kind === 'html') return mimeType.toLowerCase().split(';', 1)[0].trim() === 'application/xhtml+xml' ? '.xhtml' : '.html';
   try {
     const path = new URL(resourceUrl).pathname.toLowerCase();
     const extension = [...known].find((candidate) => path.endsWith(candidate));
@@ -56,7 +57,6 @@ function extensionFor(kind, resourceUrl, mimeType = '') {
   if (kind === 'css') return '.css';
   if (kind === 'wasm') return '.wasm';
   if (kind === 'font') return mimeType.includes('woff2') ? '.woff2' : '.font';
-  if (kind === 'html') return mimeType.toLowerCase() === 'application/xhtml+xml' ? '.xhtml' : '.html';
   return '.bin';
 }
 
@@ -98,6 +98,16 @@ async function initializeOutput(output, scope, ledgerPath) {
     types: [...scope.types],
     stopStatuses: [...scope.stopStatuses],
     limits: scope.limits,
+    automation: scope.automation.enabled ? {
+      enabled: true,
+      mode: scope.automation.mode,
+      allowAutosave: scope.automation.allowAutosave,
+      allowCreateCapturePages: scope.automation.allowCreateCapturePages,
+      maxWidgetsPerPage: scope.automation.maxWidgetsPerPage,
+      states: scope.automation.states,
+      fixtureProfileNames: scope.fixtureProfileNames,
+      mappedWidgetKeys: Object.keys(scope.widgetFixtureMap).sort(),
+    } : { enabled: false },
     ledger: ledgerPath || null,
     policy: 'natural-load-only',
     note: 'Bodies were read from completed requests already observed by the selected Chrome page. No resource URL was replayed.',

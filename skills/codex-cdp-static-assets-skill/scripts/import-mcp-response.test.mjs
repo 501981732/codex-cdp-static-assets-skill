@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { promisify } from 'node:util';
+import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +8,8 @@ import test from 'node:test';
 
 import { auditCapture } from './audit-capture.mjs';
 import { classifyMcpResource, importMcpResponse } from './import-mcp-response.mjs';
+
+const execFileAsync = promisify(execFile);
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'mcp-static-assets-'));
@@ -89,6 +93,43 @@ test('imports an MCP response into the existing audited capture format', async (
   });
 });
 
+test('provenance records only non-sensitive automation policy and fixture names', async () => {
+  const paths = await fixture();
+  const scope = JSON.parse(await readFile(paths.scopePath, 'utf8'));
+  scope.automation = {
+    enabled: true,
+    mode: 'single-page',
+    allowAutosave: true,
+    allowCreateCapturePages: false,
+    maxWidgetsPerPage: 5,
+    states: ['editor-mounted', 'viewport-visible', 'config-opened', 'data-bound', 'preview-visible'],
+  };
+  scope.fixtureProfiles = {
+    objects: { kind: 'synthetic-object-set', visibleOption: 'CDP Objects', secret: 'must-not-persist' },
+  };
+  scope.widgetFixtureMap = { 'tables/object-table/v1': 'objects' };
+  await writeFile(paths.scopePath, JSON.stringify(scope));
+  const bodyPath = join(paths.root, 'response.network-response');
+  await writeFile(bodyPath, 'console.log("automation");');
+
+  await importMcpResponse({
+    scopePath: paths.scopePath,
+    output: paths.output,
+    bodyPath,
+    url: 'https://cdn.example.com/widget.js',
+    status: 200,
+    resourceType: 'script',
+    mimeType: 'application/javascript',
+  });
+
+  const provenanceText = await readFile(join(paths.output, 'provenance.json'), 'utf8');
+  const provenance = JSON.parse(provenanceText);
+  assert.deepEqual(provenance.automation.fixtureProfileNames, ['objects']);
+  assert.deepEqual(provenance.automation.mappedWidgetKeys, ['tables/object-table/v1']);
+  assert.equal(provenanceText.includes('must-not-persist'), false);
+  assert.equal(provenanceText.includes('CDP Objects'), false);
+});
+
 test('rejects an MCP response from an unapproved host before saving the body', async () => {
   const paths = await fixture();
   const bodyPath = join(paths.root, 'response.network-response');
@@ -140,7 +181,7 @@ test('imports naturally loaded approved top-level document HTML', async () => {
     output: paths.output,
     ledgerPath: paths.ledgerPath,
     bodyPath,
-    url: 'https://workshop.example.com/module/edit/1?token=secret',
+    url: 'https://workshop.example.com/module/edit/fallback.js?token=secret',
     status: 304,
     resourceType: 'document',
     mimeType: 'text/html',
@@ -155,6 +196,38 @@ test('imports naturally loaded approved top-level document HTML', async () => {
   assert.equal(result.kind, 'html');
   assert.match(result.file, /^assets\/html\/[a-f0-9]{64}\.html$/);
   assert.equal(await readFile(join(paths.output, result.file), 'utf8'), '<!doctype html><title>Workshop</title>');
+});
+
+test('CLI parses and applies the strict HTML request metadata', async () => {
+  const paths = await fixture();
+  const bodyPath = join(paths.root, 'response.network-response');
+  await writeFile(bodyPath, '<!doctype html><title>CLI</title>');
+  const scriptPath = new URL('./import-mcp-response.mjs', import.meta.url);
+
+  const { stdout } = await execFileAsync(process.execPath, [
+    scriptPath.pathname,
+    '--scope', paths.scopePath,
+    '--output', paths.output,
+    '--body', bodyPath,
+    '--url', 'https://workshop.example.com/cli',
+    '--status', '200',
+    '--resource-type', 'document',
+    '--mime-type', 'text/html',
+    '--request-method', 'GET',
+    '--request-has-body', 'false',
+    '--document-context', 'top-level',
+  ]);
+  assert.equal(JSON.parse(stdout).event, 'saved');
+
+  await assert.rejects(execFileAsync(process.execPath, [
+    scriptPath.pathname,
+    '--scope', paths.scopePath,
+    '--output', join(paths.root, 'invalid-cli'),
+    '--url', 'https://workshop.example.com/cli',
+    '--status', '200',
+    '--resource-type', 'document',
+    '--request-has-body', 'unknown',
+  ]), /request-has-body must be true or false/);
 });
 
 test('imports approved widget iframe XHTML with an xhtml extension', async () => {

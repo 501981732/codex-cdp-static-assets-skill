@@ -1,3 +1,5 @@
+import { normalizeAutomationPolicy } from './automation-policy.mjs';
+
 const DEFAULT_TYPES = new Set(['js', 'css', 'wasm', 'font']);
 const DEFAULT_LIMITS = { maxAssets: 0, maxTotalMiB: 0, maxAssetMiB: 50 };
 
@@ -59,6 +61,7 @@ export function normalizeScope(input) {
   const types = input.types ? new Set(requiredArray(input.types, 'types')) : new Set(DEFAULT_TYPES);
   const validTypes = new Set(['js', 'css', 'wasm', 'font', 'image', 'html']);
   for (const type of types) if (!validTypes.has(type)) throw new Error(`Unsupported scope type: ${type}`);
+  const automation = normalizeAutomationPolicy(input);
   return {
     caseId: typeof input.caseId === 'string' ? input.caseId : null,
     pageHosts,
@@ -67,13 +70,17 @@ export function normalizeScope(input) {
     types,
     limits,
     stopStatuses: new Set(stopStatuses),
+    automation,
+    fixtureProfileNames: automation.fixtureProfileNames || [],
+    fixtureProfiles: automation.fixtureProfiles || Object.freeze({}),
+    widgetFixtureMap: automation.widgetFixtureMap || Object.freeze({}),
   };
 }
 
 export function validateBody(kind, body) {
   if (!body.length) return { accepted: false, reason: 'empty-body' };
   if (!body.some((byte) => byte !== 0)) return { accepted: false, reason: 'all-zero-body' };
-  const textHead = body.subarray(0, 512).toString('utf8').trimStart().toLowerCase();
+  const textHead = body.subarray(0, 2048).toString('utf8').trimStart().toLowerCase();
   if ((kind === 'js' || kind === 'css') && (textHead.startsWith('<!doctype html') || textHead.startsWith('<html') || textHead.includes('<head'))) {
     return { accepted: false, reason: `html-body-for-${kind}` };
   }
