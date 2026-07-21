@@ -62,7 +62,10 @@ async function auditComponentAssets(output, manifestEntries) {
   const invalid = [];
   const add = (reason, detail) => invalid.push({ file: 'metadata/component-assets.json', reason, ...(detail ? { detail } : {}) });
   if (model.schemaVersion !== 1 || typeof model.caseId !== 'string' || !model.caseId
-    || !Array.isArray(model.components) || !model.baseline || typeof model.summary !== 'object') {
+    || Number.isNaN(Date.parse(model.generatedAt)) || !Array.isArray(model.components)
+    || model.baseline?.marker !== 'baseline' || model.baseline?.status !== 'captured'
+    || !Array.isArray(model.baseline?.assets) || !Array.isArray(model.baseline?.bodyUnavailable)
+    || !Array.isArray(model.baseline?.failures) || typeof model.summary !== 'object') {
     add('component-assets-invalid-schema');
     return { file: 'metadata/component-assets.json', invalid, summary: { componentCount: 0, completeComponents: 0, partialComponents: 0 } };
   }
@@ -114,7 +117,8 @@ async function auditComponentAssets(output, manifestEntries) {
     complete: model.components.filter((component) => component.coverageStatus === 'complete').length,
     partial: model.components.filter((component) => component.coverageStatus === 'partial').length,
   };
-  if (JSON.stringify(model.summary) !== JSON.stringify(expectedSummary)) add('component-summary-inconsistent');
+  if (model.summary.total !== expectedSummary.total || model.summary.complete !== expectedSummary.complete
+    || model.summary.partial !== expectedSummary.partial) add('component-summary-inconsistent');
   return {
     file: 'metadata/component-assets.json',
     invalid,
