@@ -111,7 +111,7 @@ HTML 只有同时满足以下条件时才允许保留：
    - `editor-mounted`：添加完成后等待编辑器结构稳定并采集；
    - `viewport-visible`：滚动并使 Widget 完整进入画布可视区，等待可见渲染后采集；
    - `config-opened`：打开可见配置面板，等待配置相关资源加载后采集；
-   - `data-bound`：若可见配置表明需要数据源，则按 `widgetFixtureMap` 选择已批准 Profile、保存配置、重新滚动到可视区，等待数据渲染后采集；若不支持数据源则记录 `not-applicable`，若需要但没有映射则记录 `blocked-missing-fixture`；
+   - `data-bound`：若可见配置表明数据源为必填，则按 `widgetFixtureMap` 选择已批准 Profile、保存配置、重新滚动到可视区，等待数据渲染后采集；若组件没有数据源能力则记录 `not-applicable`；若数据源可选且 Scope 没有映射，则保留已采集的无数据状态、把 `data-bound` 记录为 `not-requested`，不影响完整度；若数据源必填但没有映射，则记录 `blocked-missing-fixture`；若数据源可选且 Scope 提供了映射，则额外执行并覆盖 `data-bound`；
    - `preview-visible`：进入可见预览或 Runtime 状态，将 Widget 滚动到可视区，等待渲染后采集；不支持预览时记录 `not-applicable`；
    - 每个状态都使用独立 Marker，例如 `widget:object-table:a1b2c3d4:data-bound`；
    - 每个状态在运行超时时间内，等待 Network 请求身份和状态连续两次轮询保持不变；
@@ -178,7 +178,7 @@ HTML 只有同时满足以下条件时才允许保留：
 
 始终输出 baseline 记录。每个尝试过的规范 Widget Key 都必须输出一条组件记录，包括失败尝试。合并时按 `(capturePage, widgetKey)` 汇总组件记录；按 `(sha256, 脱敏 URL)` 去重资源；保留最早的首次观察 Marker；合并全部 `bodyUnavailable` 条目；保留所有不同失败；按 `(at, sourceRun)` 追加每次尝试。
 
-汇总状态必须确定性计算：每个要求状态只要任一次成功采集即为 `captured`；否则，缺少已批准数据源映射时为 `blocked-missing-fixture`，任一次执行失败则为 `failed`，可见 UI 明确不支持时为 `not-applicable`。只有没有任何运行请求该状态时才保留 `not-requested`。`coveredStates` 只包含 `captured`，`blockedStates` 包含所有 `blocked-*` 和 `failed` 状态。全部适用的要求状态均为 `captured` 且不存在阻塞时，`coverageStatus` 才能是 `complete`；否则为 `partial`。即使后续尝试成功，历史失败仍保留在 `failures` 和 `attempts` 中。组件按 `widgetKey` 排序，资源按 `(kind, URL, sha256)` 排序，以确保输出稳定。
+汇总状态必须确定性计算：每个要求状态只要任一次成功采集即为 `captured`；否则，必填数据源缺少获批映射时为 `blocked-missing-fixture`，任一次执行失败则为 `failed`，可见 UI 明确不支持时为 `not-applicable`。组件没有数据源能力时，`data-bound` 不进入 `requiredStates`；数据源可选且 Scope 未映射时，`data-bound` 为 `not-requested`，同样不进入 `requiredStates`。`coveredStates` 只包含 `captured`，`blockedStates` 包含所有 `blocked-*` 和 `failed` 状态。全部适用的要求状态均为 `captured` 且不存在阻塞时，`coverageStatus` 才能是 `complete`；否则为 `partial`。即使后续尝试成功，历史失败仍保留在 `failures` 和 `attempts` 中。组件按 `widgetKey` 排序，资源按 `(kind, URL, sha256)` 排序，以确保输出稳定。
 
 证据分类如下：
 
