@@ -4,7 +4,7 @@ The JSON Scope is both the one-time authorization boundary and an audit input. M
 
 ## Required authorization
 
-Record the case ID, exact page host/Module, test account, time and traffic ceilings, stop contact, asset types, autosave permission, capture-page permission, and explicit permissions to use, create, modify, or delete variables in the approved Module. Exact synthetic fixtures may still be approved as per-Widget overrides. The authorization permits only visible Workshop edits needed for capture.
+Record the case ID, exact page host/Module, test account, time and traffic ceilings, stop contact, asset types, autosave permission, capture-page permission, and whether Module variables may be handled automatically. The authorization permits only visible Workshop edits needed for capture.
 
 ```json
 {
@@ -32,10 +32,7 @@ Record the case ID, exact page host/Module, test account, time and traffic ceili
     "mode": "full-catalog",
     "allowAutosave": true,
     "allowCreateCapturePages": true,
-    "allowExistingModuleVariables": true,
-    "allowCreateTestVariables": true,
-    "allowModifyModuleVariables": true,
-    "allowDeleteModuleVariables": true,
+    "allowModuleVariables": true,
     "captureStateScreenshots": false,
     "maxWidgetsPerPage": 8,
     "states": [
@@ -43,15 +40,6 @@ Record the case ID, exact page host/Module, test account, time and traffic ceili
       "data-bound",
       "preview-visible"
     ]
-  },
-  "fixtureProfiles": {
-    "objects": {
-      "kind": "synthetic-object-set",
-      "visibleOption": "CDP Synthetic Objects"
-    }
-  },
-  "widgetFixtureMap": {
-    "tables/object-table/v1": "objects"
   }
 }
 ```
@@ -67,33 +55,25 @@ node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
 - `full-catalog` requires `allowAutosave: true` and `allowCreateCapturePages: true`. Pages are named `CDP Capture 001`, `CDP Capture 002`, and so on.
 - `single-page` requires `allowAutosave: true` and `allowCreateCapturePages: false`. At capacity, record `blocked-page-capacity` and stop.
 - `captureStateScreenshots: true` authorizes one element-level PNG evidence item per successful state. Omit it or set it to `false` by default.
-- `allowCreateTestVariables: true` authorizes creating new, dedicated `CDP Capture` test variables through visible UI. It does not authorize modifying or deleting any variable or data source.
-- `allowModifyModuleVariables: true` authorizes modifying variables through visible UI in the exact approved Module.
-- `allowDeleteModuleVariables: true` authorizes deleting variables through visible UI in the exact approved Module, including `CDP Capture` cleanup variables.
+- `allowModuleVariables: true` authorizes creating, selecting, modifying, deleting, and cleaning up variables through visible UI in the exact approved Module.
 - Omitted automation is passive mode. An automation object must use an explicit boolean `enabled`.
 
 `maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix. Automated Scope also requires a non-empty Case ID, an exact query-free `approvedPageUrl` whose final path segment equals `moduleId`, plus test account, a currently active increasing authorization window, and stop contact. Expired or not-yet-active Scope is rejected. These fields let the runner stop on same-host Module drift; account/contact values are never copied into provenance.
 
-## Test variables, existing variables, and fixture overrides
+## Variables
 
-`allowCreateTestVariables: true` authorizes the runner to create a new, clearly named `CDP Capture` test variable in the approved Module when a mapped data fixture is needed. `allowModifyModuleVariables: true` and `allowDeleteModuleVariables: true` separately authorize visible modification and deletion in that exact Module. Use deletion for cleanup only after all resource capture and state evidence is complete. None of these permissions authorize creating or changing a data source.
-
-`allowExistingModuleVariables: true` authorizes selecting variables already defined in the approved Module. Keep the current selection when the Widget's visible typed selector accepts it; otherwise choose the first enabled compatible option presented by that selector. Never inspect hidden candidates. Modification and deletion require their own explicit flags; data sources are never modified or deleted.
-
-`fixtureProfiles` names exact visible test options and `widgetFixtureMap` may reference only those names. A mapped fixture overrides automatic existing-variable selection for that Widget.
+`allowModuleVariables: true` lets the runner create, select, modify, delete, and clean up variables in the approved Module. Use only visible UI. It does not need to understand the requests or business data behind a variable.
 
 For `data-bound`:
 
-- no data-source capability: `not-applicable`, `required: false`;
-- mapping present and test-variable creation authorized: create then select the exact `visibleOption`;
-- mapping present without test-variable creation: select the exact existing `visibleOption`;
-- no mapping and existing Module variables are authorized: keep or select a visibly compatible existing variable;
-- no compatible variable for an optional source: `not-requested`, `required: false`;
-- no compatible variable for a required source: `blocked-missing-fixture`, partial coverage, then continue the remaining states and Widgets.
+- no variable-input capability: `not-applicable`, `required: false`;
+- a compatible visible variable path: create or select it, bind it, then capture the rendered state;
+- no compatible variable for an optional input: `not-requested`, `required: false`;
+- no compatible variable for a required input: `blocked-missing-fixture`, partial coverage, then continue the remaining states and Widgets.
 
 After a successful selection, save through approved autosave, return to the Widget, and capture the rendered data state. A missing fixture affects behavior coverage only; it does not reduce implementation-body retention.
 
-Provenance retains only variable authorization booleans, Profile names, and mapped widget keys—not variable names, visible option text, or rendered data.
+Provenance retains only the variable-automation authorization—not variable names, visible option text, request payloads, or rendered data.
 
 ## Exact hosts
 

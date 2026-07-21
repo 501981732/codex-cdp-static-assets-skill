@@ -31,10 +31,7 @@ function validInput(overrides = {}) {
       mode: 'full-catalog',
       allowAutosave: true,
       allowCreateCapturePages: true,
-      allowExistingModuleVariables: true,
-      allowCreateTestVariables: true,
-      allowModifyModuleVariables: true,
-      allowDeleteModuleVariables: true,
+      allowModuleVariables: true,
       maxWidgetsPerPage: 8,
       states,
       ...overrides.automation,
@@ -47,6 +44,7 @@ test('normalizes and freezes a fully authorized automation policy', () => {
   assert.equal(policy.enabled, true);
   assert.equal(policy.mode, 'full-catalog');
   assert.equal(policy.maxWidgetsPerPage, 8);
+  assert.equal(policy.allowModuleVariables, true);
   assert.equal(policy.allowExistingModuleVariables, true);
   assert.equal(policy.allowCreateTestVariables, true);
   assert.equal(policy.allowModifyModuleVariables, true);
@@ -68,6 +66,7 @@ test('rejects incomplete or unsafe automation authorization', () => {
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { states: ['editor-mounted', 'hidden-state'] } })), /state/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { states: ['editor-mounted', 'viewport-visible'] } })), /state/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { captureStateScreenshots: 'yes' } })), /captureStateScreenshots/);
+  assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowModuleVariables: 'yes' } })), /allowModuleVariables/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowExistingModuleVariables: 'yes' } })), /allowExistingModuleVariables/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowCreateTestVariables: 'yes' } })), /allowCreateTestVariables/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { allowModifyModuleVariables: 'yes' } })), /allowModifyModuleVariables/);
