@@ -70,6 +70,9 @@ export function normalizeAutomationPolicy(input = {}) {
   if (automation.allowExistingModuleVariables !== undefined && typeof automation.allowExistingModuleVariables !== 'boolean') {
     throw new Error('Automation allowExistingModuleVariables must be a boolean');
   }
+  if (automation.allowCreateTestVariables !== undefined && typeof automation.allowCreateTestVariables !== 'boolean') {
+    throw new Error('Automation allowCreateTestVariables must be a boolean');
+  }
 
   const fixtureProfiles = input.fixtureProfiles || {};
   if (!fixtureProfiles || Array.isArray(fixtureProfiles) || typeof fixtureProfiles !== 'object') throw new Error('fixtureProfiles must be an object');
@@ -89,6 +92,7 @@ export function normalizeAutomationPolicy(input = {}) {
     allowAutosave: true,
     allowCreateCapturePages: automation.allowCreateCapturePages,
     allowExistingModuleVariables: automation.allowExistingModuleVariables === true,
+    allowCreateTestVariables: automation.allowCreateTestVariables === true,
     captureStateScreenshots: automation.captureStateScreenshots === true,
     maxWidgetsPerPage: automation.maxWidgetsPerPage,
     states: Object.freeze(normalizedStates),

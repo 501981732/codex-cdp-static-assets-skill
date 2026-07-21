@@ -14,7 +14,7 @@ Only after the single consolidated authorization, use these Chrome DevTools MCP 
 | Inspect already observed requests | `list_network_requests` |
 | Read one completed response | `get_network_request` with `reqid` and `responseFilePath` |
 
-Visible actions are restricted to the approved Workshop Module: Add Widget, deterministic capture-page creation, canvas/catalog scrolling, widget configuration, compatible existing Module variable or exact fixture selection, autosave, preview, and explicitly authorized element-level state screenshots.
+Visible actions are restricted to the approved Workshop Module: Add Widget, deterministic capture-page creation, authorized dedicated `CDP Capture` test-variable creation, canvas/catalog scrolling, widget configuration, compatible existing Module variable or exact fixture selection, autosave, preview, and explicitly authorized element-level state screenshots.
 
 ## Prohibited operations
 
@@ -25,7 +25,7 @@ Never use `evaluate_script`. Never set `requestFilePath`.
 - Never clear/disable cache, bypass a Service Worker, intercept traffic, or alter headers, signatures, origin, referer, fingerprint, requests, or responses.
 - Never extract or transfer cookies, Authorization values, passwords, request bodies, browser profiles, or unrelated tab metadata.
 - Never use full-page screenshots or retain accessibility/DOM snapshots. If the Widget or panel cannot be uniquely targeted, omit the screenshot instead of widening the evidence scope.
-- Never publish, run actions/workflows, export, change permissions, write source data, or create/modify/delete a data source or Module variable.
+- Never publish, run actions/workflows, export, change permissions, write source data, create/modify/delete a data source, or modify/delete a Module variable. Creating a new dedicated `CDP Capture` test variable is allowed only when `allowCreateTestVariables: true` is in the approved Scope.
 
 ## Response-body rule
 
@@ -45,7 +45,7 @@ Canonical widget identity is derived only from visible label, category, and vers
 
 ## Stop conditions
 
-Stop before further body reads or UI mutation on an unknown host, page/Module drift, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, unexpected write, unapproved variable selection, traffic/time ceiling, or owner/SOC instruction. A Widget with no compatible existing variable is a component-level partial result and does not stop catalog traversal.
+Stop before further body reads or UI mutation on an unknown host, page/Module drift, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, unexpected write, unapproved variable creation or selection, traffic/time ceiling, or owner/SOC instruction. A Widget with no compatible variable is a component-level partial result and does not stop catalog traversal.
 
 ## Data handling
 

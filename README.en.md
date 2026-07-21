@@ -45,7 +45,7 @@ After installing or updating, start a new Codex task and invoke `$codex-cdp-stat
 3. Restart Codex. Open `chrome://inspect/#remote-debugging` in Chrome, enable Remote debugging, then open the Workshop page to capture.
 4. Prefer a dedicated test Module. Capture creates pages, adds Widgets, changes Widget configuration, and autosaves.
 
-For data-required Widgets such as Object Table, you can first create a test variable in the Module yourself. The Skill only uses an existing variable that the Widget UI explicitly marks compatible; it never creates, changes, or deletes variables or data sources.
+For data-required Widgets such as Object Table, the Skill can create a clearly named `CDP Capture` test variable in the dedicated test Module, or use an existing variable that the Widget UI explicitly marks compatible. It never modifies or deletes a variable, and never creates, changes, or deletes a data source.
 
 ## Ask Codex like this
 
@@ -57,7 +57,7 @@ https://workshop.example.com/module/edit/...
 
 Case ID: SEC-2026-001
 This is a dedicated test Module. Allow creation of CDP Capture pages, Widget addition/configuration, and autosave.
-Allow existing Module variables only when the Widget UI explicitly marks them compatible. Do not create, modify, or delete variables or data sources.
+Allow creation of dedicated test variables named CDP Capture, and allow existing Module variables only when the Widget UI explicitly marks them compatible. Do not modify or delete variables, and do not create, modify, or delete data sources.
 First discover only the host and Widget entry points, then summarize the intended actions, Widget limit per page, and data-source policy for one approval. Run automatically after that approval.
 Capture js, css, wasm, image, and naturally loaded page or Widget-iframe HTML. Exclude fonts by default.
 ```

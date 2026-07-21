@@ -40,6 +40,7 @@ test('skill defines one-authorization automated widget capture with explicit bou
     'editor-mounted',
     'data-bound',
     'allowExistingModuleVariables',
+    'allowCreateTestVariables',
     'preview-visible',
     'baseline:catalog',
     'assetCoverageStatus',
