@@ -65,12 +65,22 @@ test('skill defines one-authorization automated widget capture with explicit bou
     assert.equal(allowedOperations.includes(prohibitedTool), false, `prohibited tool appears in allowed operations: ${prohibitedTool}`);
   }
 
-  const affirmativeCheckpointRequirements = combined.split('\n').filter((line) => {
-    const asksForCheckpoint = /(?:回复|等待|要求)[^\n]{0,60}P[12]\s*完成/i.test(line)
-      || /(?:reply|respond|wait for|ask (?:the )?(?:operator|user))[^\n]{0,60}P[12]\s+(?:is\s+)?complete/i.test(line);
-    const explicitlyNegated = /(?:无需|不再|不得|禁止|does not|do not|never|no longer)/i.test(line);
-    return asksForCheckpoint && !explicitlyNegated;
-  });
+  const affirmativeCheckpointRequirements = [];
+  for (const document of [skill, readme, readmeEnglish, runbook]) {
+    const headings = [...document.matchAll(/^#{2,6}\s+(.+)$/gm)];
+    const sections = headings.map((heading, index) => ({
+      title: heading[1],
+      body: document.slice(heading.index + heading[0].length, headings[index + 1]?.index ?? document.length),
+    }));
+    for (const section of sections) {
+      if (/(?:manual|passive|人工|被动)/i.test(section.title)) continue;
+      for (const match of section.body.matchAll(/P[12]\s*(?:完成|complete)/gi)) {
+        const preceding = section.body.slice(Math.max(0, match.index - 100), match.index);
+        if (/(?:无需|不再|不得|禁止|does not|do not|never|no longer)[^\n]{0,80}$/i.test(preceding)) continue;
+        affirmativeCheckpointRequirements.push(`${section.title}: ${match[0]}`);
+      }
+    }
+  }
   assert.deepEqual(
     affirmativeCheckpointRequirements,
     [],
