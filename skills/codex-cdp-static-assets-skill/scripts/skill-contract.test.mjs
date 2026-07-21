@@ -18,10 +18,53 @@ test('skill uses autoConnect as its only Chrome connection path', async () => {
   }
 });
 
-test('skill keeps the passive capture boundary and operator checkpoints', async () => {
-  const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
-  const readme = await readFile(new URL('../../../README.md', import.meta.url), 'utf8');
-  for (const required of ['never refetch', 'Never set `requestFilePath`', 'body-unavailable', 'P1 完成', '全部完成']) {
-    assert.equal(`${skill}\n${readme}`.includes(required), true, `missing workflow boundary: ${required}`);
+test('skill defines one-authorization automated widget capture with explicit boundaries', async () => {
+  const [skill, readme, readmeEnglish, boundaries, runbook, scopeConfig] = await Promise.all([
+    readFile(new URL('../SKILL.md', import.meta.url), 'utf8'),
+    readFile(new URL('../../../README.md', import.meta.url), 'utf8'),
+    readFile(new URL('../../../README.en.md', import.meta.url), 'utf8'),
+    readFile(new URL('../references/cdp-boundaries.md', import.meta.url), 'utf8'),
+    readFile(new URL('../references/workshop-runbook.md', import.meta.url), 'utf8'),
+    readFile(new URL('../references/scope-config.md', import.meta.url), 'utf8'),
+  ]);
+  const combined = [skill, readme, readmeEnglish, boundaries, runbook, scopeConfig].join('\n');
+  const allowedOperations = boundaries.match(/## Allowed operations([\s\S]*?)(?=\n## |$)/)?.[1] || '';
+
+  for (const required of [
+    'take_snapshot',
+    'click',
+    'drag',
+    'fill',
+    'press_key',
+    'single consolidated authorization',
+    'editor-mounted',
+    'viewport-visible',
+    'config-opened',
+    'data-bound',
+    'preview-visible',
+    'component-assets.json',
+    'text/html',
+    'body-unavailable',
+  ]) {
+    assert.equal(combined.includes(required), true, `missing automated capture contract: ${required}`);
   }
+
+  for (const requiredBoundary of [
+    'Never use `evaluate_script`',
+    'Never set `requestFilePath`',
+    'never refetch',
+    'unknown host',
+  ]) {
+    assert.equal(combined.includes(requiredBoundary), true, `missing workflow boundary: ${requiredBoundary}`);
+  }
+
+  for (const allowedTool of ['take_snapshot', 'click', 'drag', 'fill', 'press_key']) {
+    assert.equal(allowedOperations.includes(allowedTool), true, `allowed operations omit ${allowedTool}`);
+  }
+  for (const prohibitedTool of ['evaluate_script', 'requestFilePath']) {
+    assert.equal(allowedOperations.includes(prohibitedTool), false, `prohibited tool appears in allowed operations: ${prohibitedTool}`);
+  }
+
+  assert.equal(readme.includes('P1 完成'), false, 'normal flow still requires per-widget P1 confirmation');
+  assert.equal(readme.includes('P2 完成'), false, 'normal flow still requires per-widget P2 confirmation');
 });
