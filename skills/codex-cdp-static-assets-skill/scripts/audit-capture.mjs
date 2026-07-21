@@ -39,30 +39,39 @@ function sameValues(left, right) {
 }
 
 async function auditComponentAssets(output, manifestEntries) {
-  const componentPath = join(output, 'component-assets.json');
+  const componentPath = join(output, 'metadata', 'component-assets.json');
   const mergeSummaryPath = join(output, 'metadata', 'merge-summary.json');
   if (!await exists(componentPath)) {
+    const mergeSummary = await exists(mergeSummaryPath) ? JSON.parse(await readFile(mergeSummaryPath, 'utf8')) : null;
     return {
       file: null,
-      invalid: await exists(mergeSummaryPath) ? [{ file: 'component-assets.json', reason: 'component-assets-missing' }] : [],
+      invalid: Number(mergeSummary?.componentCount) > 0 ? [{ file: 'metadata/component-assets.json', reason: 'component-assets-missing' }] : [],
+      summary: { componentCount: 0, completeComponents: 0, partialComponents: 0 },
     };
   }
   let model;
   try {
     model = JSON.parse(await readFile(componentPath, 'utf8'));
   } catch {
-    return { file: 'component-assets.json', invalid: [{ file: 'component-assets.json', reason: 'component-assets-invalid-json' }] };
+    return {
+      file: 'metadata/component-assets.json',
+      invalid: [{ file: 'metadata/component-assets.json', reason: 'component-assets-invalid-json' }],
+      summary: { componentCount: 0, completeComponents: 0, partialComponents: 0 },
+    };
   }
   const invalid = [];
-  const add = (reason, detail) => invalid.push({ file: 'component-assets.json', reason, ...(detail ? { detail } : {}) });
-  if (model.schemaVersion !== 1 || !Array.isArray(model.components) || !model.baseline || typeof model.summary !== 'object') {
+  const add = (reason, detail) => invalid.push({ file: 'metadata/component-assets.json', reason, ...(detail ? { detail } : {}) });
+  if (model.schemaVersion !== 1 || typeof model.caseId !== 'string' || !model.caseId
+    || !Array.isArray(model.components) || !model.baseline || typeof model.summary !== 'object') {
     add('component-assets-invalid-schema');
-    return { file: 'component-assets.json', invalid };
+    return { file: 'metadata/component-assets.json', invalid, summary: { componentCount: 0, completeComponents: 0, partialComponents: 0 } };
   }
   const manifestAssets = new Set(manifestEntries.filter((entry) => entry.event === 'saved').map((entry) => `${entry.sha256}\n${entry.url}`));
   const sourceManifest = await readNdjson(join(output, 'metadata', 'source-manifest.ndjson'));
   const unavailable = new Set(sourceManifest.filter((entry) => entry.event === 'body-unavailable').map((entry) => `${entry.sourceRun}\n${entry.requestId}\n${entry.url}`));
-  const recordedAttempts = new Set((await readNdjson(join(output, 'metadata', 'component-events.ndjson'))).map((entry) => `${entry.sourceRun}\n${entry.attemptId}`));
+  const componentEvents = await readNdjson(join(output, 'metadata', 'component-events.ndjson'));
+  if (componentEvents.some((entry) => entry.caseId !== model.caseId)) add('component-case-id-mismatch');
+  const recordedAttempts = new Set(componentEvents.map((entry) => `${entry.sourceRun}\n${entry.attemptId}`));
   const identities = new Set();
   for (const component of model.components) {
     const identity = `${component.capturePage}\n${component.widgetKey}`;
@@ -80,7 +89,12 @@ async function auditComponentAssets(output, manifestEntries) {
     const covered = stateEntries.filter(([, status]) => status === 'captured').map(([state]) => state);
     const blocked = stateEntries.filter(([, status]) => status === 'failed' || String(status).startsWith('blocked-')).map(([state]) => state);
     if (!sameValues(covered, component.coveredStates) || !sameValues(blocked, component.blockedStates)) add('component-state-index-inconsistent', identity);
-    const shouldBeComplete = component.requiredStates.every((state) => component.states[state] === 'captured') && blocked.length === 0;
+    const expectedRequiredStates = Object.keys(component.states).filter((state) => {
+      if (['not-applicable', 'not-requested'].includes(component.states[state])) return false;
+      return component.attempts.some((attempt) => attempt.state === state && attempt.required === true);
+    });
+    if (!sameValues(expectedRequiredStates, component.requiredStates)) add('component-required-states-inconsistent', identity);
+    const shouldBeComplete = expectedRequiredStates.every((state) => component.states[state] === 'captured') && blocked.length === 0;
     if ((component.coverageStatus === 'complete') !== shouldBeComplete) add('component-coverage-status-inconsistent', identity);
     for (const asset of component.firstObservedAssets) {
       if (!manifestAssets.has(`${asset.sha256}\n${asset.url}`)) add('component-asset-not-in-manifest', `${identity}\n${asset.sha256}`);
@@ -101,7 +115,15 @@ async function auditComponentAssets(output, manifestEntries) {
     partial: model.components.filter((component) => component.coverageStatus === 'partial').length,
   };
   if (JSON.stringify(model.summary) !== JSON.stringify(expectedSummary)) add('component-summary-inconsistent');
-  return { file: 'component-assets.json', invalid };
+  return {
+    file: 'metadata/component-assets.json',
+    invalid,
+    summary: {
+      componentCount: model.components.length,
+      completeComponents: model.components.filter((component) => component.coverageStatus === 'complete').length,
+      partialComponents: model.components.filter((component) => component.coverageStatus === 'partial').length,
+    },
+  };
 }
 
 async function exists(file) {
@@ -166,7 +188,10 @@ export async function auditCapture(outputDirectory) {
   return {
     output,
     manifest: manifest.file ? relative(output, manifest.file) : null,
-    componentAssets: componentAudit.file,
+    componentMap: {
+      present: componentAudit.file !== null,
+      ...componentAudit.summary,
+    },
     totalFiles: files.length,
     validFiles,
     invalid,

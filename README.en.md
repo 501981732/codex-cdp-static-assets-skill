@@ -60,7 +60,7 @@ After approval it automatically:
 4. Covers `editor-mounted`, `viewport-visible`, `config-opened`, `data-bound`, and `preview-visible`.
 5. At every state, checks all hosts/statuses, waits for three identical request ID/status observations, reads completed response bodies by request ID, and imports immediately.
 6. Records resumable attempts and only fills missing states after interruption.
-7. Audits each run, merges by SHA-256/URL, and creates `component-assets.json`.
+7. Audits each run, merges by SHA-256/URL, and creates `metadata/component-assets.json`.
 
 The viewport state is mandatory because canvas virtualization or IntersectionObserver rendering can delay natural loads until a Widget is visible. After data configuration, the workflow scrolls back to the Widget and waits for rendering again.
 
@@ -89,6 +89,6 @@ Publishing, actions/workflows, export, permission changes, production writes, hi
 
 ## Output
 
-Runs contain content-addressed assets, redacted manifests, component attempts, risks/invalid bodies, and summaries. The merged delivery contains `assets/`, `metadata/manifest.ndjson`, `metadata/source-manifest.ndjson`, `metadata/component-events.ndjson`, `component-assets.json`, and audit/merge summaries.
+Runs contain content-addressed assets, redacted manifests, component attempts, risks/invalid bodies, and summaries. The merged delivery contains `assets/`, `metadata/manifest.ndjson`, `metadata/source-manifest.ndjson`, `metadata/component-events.ndjson`, `metadata/component-assets.json`, and audit/merge summaries.
 
 `firstObservedAssets` excludes baseline and assigns each `(sha256, URL)` to only the earliest non-baseline Widget marker. It is timing evidence, not exclusive ownership.

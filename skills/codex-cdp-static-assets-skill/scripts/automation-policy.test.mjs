@@ -85,6 +85,10 @@ test('requires bottom discovery plus two consecutive snapshots without a new wid
   assert.deepEqual(tracker.update([{ label: 'Table', category: 'Data', versionOrType: 'v1' }], true), { complete: false, stableCount: 1, totalKeys: 1 });
   assert.deepEqual(tracker.update([{ label: 'Table', category: 'Data', versionOrType: 'v1' }], true), { complete: true, stableCount: 2, totalKeys: 1 });
   assert.deepEqual(tracker.update([{ label: 'Chart', category: 'Data', versionOrType: 'v1' }], true), { complete: false, stableCount: 0, totalKeys: 2 });
+  assert.throws(() => tracker.update([
+    { label: 'Chart', category: 'Data', versionOrType: 'v1' },
+    { label: 'Chart', category: 'Data', versionOrType: 'v1' },
+  ], true), /catalog-identity-ambiguity/);
 });
 
 test('requires baseline plus two identical network observations and resets on change', () => {
@@ -110,6 +114,11 @@ test('plans baseline, capacity, and state-level resume deterministically', () =>
     action: 'blocked',
     reason: 'blocked-existing-instance-ambiguous',
   });
+  assert.equal(planResume({ completedStates: [], added: false, fixtureAvailable: true, visibleMatches: 1 }).action, 'resume-existing');
+  assert.deepEqual(planResume({ completedStates: [], added: true, fixtureAvailable: true, visibleMatches: 0 }), {
+    action: 'blocked',
+    reason: 'blocked-existing-instance-ambiguous',
+  });
 });
 
 test('CLI state files retain only canonical keys or request fingerprints', async () => {
@@ -128,4 +137,17 @@ test('CLI state files retain only canonical keys or request fingerprints', async
   assert.deepEqual(catalog.keys, ['tables/object-table/v1']);
   assert.deepEqual(Object.keys(network).sort(), ['fingerprint', 'stableCount']);
   assert.equal(JSON.stringify([catalog, network]).includes('secret'), false);
+});
+
+test('catalog-update CLI stops on indistinguishable same-snapshot widgets', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'automation-policy-ambiguity-'));
+  await assert.rejects(runAutomationPolicyCli([
+    'catalog-update',
+    '--state', join(root, 'catalog-state.json'),
+    '--entries-json', JSON.stringify([
+      { label: 'Chart', category: 'Data', versionOrType: 'v1' },
+      { label: 'Chart', category: 'Data', versionOrType: 'v1' },
+    ]),
+    '--at-bottom', 'false',
+  ]), /catalog-identity-ambiguity/);
 });

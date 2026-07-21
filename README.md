@@ -62,7 +62,7 @@ Case ID：SEC-2026-001
 4. 对每个 Widget 覆盖 `editor-mounted`、`viewport-visible`、`config-opened`、`data-bound`、`preview-visible`。
 5. 每个状态都先检查全部主机/状态码，再等待三次相同的请求 ID/状态观察，随后按 request ID 读取已完成响应并立即入库。
 6. 每次状态写入可恢复事件；中断后定位唯一现有实例，只补缺失状态，不重复添加。
-7. 逐 run 审计，最终按 SHA-256/URL 合并并生成 `component-assets.json`。
+7. 逐 run 审计，最终按 SHA-256/URL 合并并生成 `metadata/component-assets.json`。
 
 可视区步骤是必需的：Workshop 画布虚拟化或 `IntersectionObserver` 可能直到组件进入视口才渲染/加载。配置数据后还会再次滚回组件并等待渲染。
 
@@ -97,7 +97,7 @@ XHR、fetch、GraphQL/API HTML 一律排除；JS/CSS 返回 HTML 仍记为无效
 - `metadata/manifest.ndjson`：SHA-256、URL、类型、Marker 和来源 run；
 - `metadata/source-manifest.ndjson`：带 `sourceRun` 的原始观察事件；
 - `metadata/component-events.ndjson`：全部状态尝试；
-- `component-assets.json`：baseline、每个 Widget 的状态覆盖、首次观察资源、正文缺失和历史失败；
+- `metadata/component-assets.json`：Case、baseline、每个 Widget 的状态覆盖、首次观察资源、正文缺失和历史失败；
 - `metadata/asset-audit.json`、`metadata/merge-summary.json`：完整性和覆盖摘要。
 
 `firstObservedAssets` 会排除 baseline，并把同一 `(sha256, URL)` 只分配给最早的非 baseline Widget Marker。它表示观察时序，不代表独占归属。

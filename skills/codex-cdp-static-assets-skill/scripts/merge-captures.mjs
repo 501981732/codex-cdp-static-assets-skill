@@ -79,6 +79,16 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   const output = resolve(outputDirectory);
   const metadata = join(output, 'metadata');
   const inputSummaries = await Promise.all(inputs.map((input) => readJson(join(input, 'summary.json'))));
+  const inputProvenance = await Promise.all(inputs.map((input) => readJson(join(input, 'provenance.json'))));
+  const inputComponentEvents = await Promise.all(inputs.map((input) => readNdjson(join(input, 'component-events.ndjson'))));
+  const caseIds = new Set();
+  for (const [index, events] of inputComponentEvents.entries()) {
+    const runCaseIds = new Set([inputProvenance[index]?.caseId, ...events.map((event) => event.caseId)].filter(Boolean));
+    if (runCaseIds.size > 1) throw new Error(`Capture run caseId mismatch: ${basename(inputs[index])}`);
+    for (const caseId of runCaseIds) caseIds.add(caseId);
+  }
+  if (caseIds.size > 1) throw new Error(`Cannot merge different caseIds: ${[...caseIds].sort().join(', ')}`);
+  const caseId = [...caseIds][0] || null;
   const knownWorkshopBuildIds = [...new Set(inputSummaries.flatMap((summary) => summary?.workshopBuildIds || []))].sort();
   if (knownWorkshopBuildIds.length > 1) throw new Error(`Workshop build mismatch: ${knownWorkshopBuildIds.join(', ')}`);
 
@@ -99,7 +109,7 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
     const sourceRun = basename(input);
     const manifest = await readNdjson(join(input, 'manifest.ndjson'));
     sourceManifest.push(...manifest.map((entry) => ({ sourceRun, ...entry })));
-    componentEvents.push(...(await readNdjson(join(input, 'component-events.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
+    componentEvents.push(...inputComponentEvents[index].map((entry) => ({ sourceRun, ...entry })));
     const summary = inputSummaries[index];
     if (summary) summaries.push({ sourceRun, ...summary });
     risks.push(...(await readNdjson(join(input, 'risk-events.ndjson'))).map((entry) => ({ sourceRun, ...entry })));
@@ -155,7 +165,8 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   }
 
   const createdAt = new Date().toISOString();
-  const componentCoverage = buildComponentCoverage({ componentEvents, manifestEvents: sourceManifest, generatedAt: createdAt });
+  const componentCoverage = caseId ? buildComponentCoverage({ caseId, events: componentEvents, manifest: sourceManifest, generatedAt: createdAt }) : null;
+  const componentSummary = componentCoverage?.summary || { total: 0, complete: 0, partial: 0 };
   const summary = {
     createdAt,
     sourceRuns: inputs.map((input) => basename(input)),
@@ -171,7 +182,9 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
     riskEvents: risks.length,
     invalidEvents: invalid.length,
     workshopBuildIds: knownWorkshopBuildIds,
-    components: componentCoverage.summary,
+    componentCount: componentSummary.total,
+    completeComponents: componentSummary.complete,
+    partialComponents: componentSummary.partial,
   };
 
   await writeFile(join(metadata, 'manifest.ndjson'), ndjson(mergedManifest));
@@ -181,7 +194,7 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   await writeFile(join(metadata, 'source-manifest.ndjson'), ndjson(sourceManifest));
   await writeFile(join(metadata, 'component-events.ndjson'), ndjson(componentEvents));
   await writeFile(join(metadata, 'merge-summary.json'), JSON.stringify(summary, null, 2));
-  await writeFile(join(output, 'component-assets.json'), JSON.stringify(componentCoverage, null, 2));
+  if (componentCoverage) await writeFile(join(metadata, 'component-assets.json'), JSON.stringify(componentCoverage, null, 2));
   return summary;
 }
 

@@ -138,6 +138,9 @@ export function createCatalogCompletionTracker(initial = {}) {
   let stableCount = Number.isInteger(initial.stableCount) ? initial.stableCount : 0;
   return {
     update(entries, nextAtBottom) {
+      if (entries.every((entry) => typeof entry !== 'string')) {
+        buildCatalogQueue([{ snapshotId: 'current-observation', entries }]);
+      }
       let added = 0;
       for (const entry of entries) {
         const key = typeof entry === 'string' ? entry : canonicalWidgetKey(entry);
@@ -187,7 +190,8 @@ export function planResume({ completedStates = [], added = false, fixtureAvailab
   if (visibleMatches > 1) return { action: 'blocked', reason: 'blocked-existing-instance-ambiguous' };
   const missingStates = COMPONENT_STATES.filter((state) => !completedStates.includes(state));
   if (missingStates.length === 0) return { action: 'complete', missingStates: [] };
-  if (!added) return { action: 'add-widget', missingStates };
+  if (visibleMatches === 0 && added) return { action: 'blocked', reason: 'blocked-existing-instance-ambiguous' };
+  if (visibleMatches === 0) return { action: 'add-widget', missingStates };
   const result = { action: 'resume-existing', missingStates };
   if (missingStates.includes('data-bound') && !fixtureAvailable) result.dataState = 'blocked-missing-fixture';
   return result;

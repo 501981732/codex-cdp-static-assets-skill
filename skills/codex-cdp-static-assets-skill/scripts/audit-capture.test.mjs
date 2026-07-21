@@ -51,40 +51,52 @@ test('audits component-assets schema, asset references, attempts, and status con
   await writeFile(join(metadata, 'manifest.ndjson'), `${JSON.stringify({
     event: 'saved', kind: 'js', sha256, url: 'https://cdn.example.com/widget.js', file: 'assets/cdn.example.com/widget.js',
   })}\n`);
-  await writeFile(join(metadata, 'component-events.ndjson'), `${JSON.stringify({
-    sourceRun: 'run-1', attemptId: 'run-1:editor-mounted:1', widgetKey: 'tables/object-table/v1', capturePage: 'CDP Capture 001',
-  })}\n`);
-  await writeFile(join(metadata, 'merge-summary.json'), '{}');
-  await writeFile(join(output, 'component-assets.json'), JSON.stringify({
+  const editorAttempt = {
+    caseId: 'SEC-1', sourceRun: 'run-1', attemptId: 'run-1:editor-mounted:1', widgetKey: 'tables/object-table/v1', capturePage: 'CDP Capture 001',
+  };
+  const viewportAttempt = {
+    caseId: 'SEC-1', sourceRun: 'run-1', attemptId: 'run-1:viewport-visible:2', widgetKey: 'tables/object-table/v1', capturePage: 'CDP Capture 001',
+  };
+  await writeFile(join(metadata, 'component-events.ndjson'), `${JSON.stringify(editorAttempt)}\n${JSON.stringify(viewportAttempt)}\n`);
+  await writeFile(join(metadata, 'merge-summary.json'), JSON.stringify({ componentCount: 1 }));
+  await writeFile(join(metadata, 'component-assets.json'), JSON.stringify({
     schemaVersion: 1,
+    caseId: 'SEC-1',
     generatedAt: '2026-07-21T00:00:00.000Z',
     summary: { total: 1, complete: 0, partial: 1 },
     baseline: { marker: 'baseline', status: 'captured', assets: [], bodyUnavailable: [], failures: [] },
     components: [{
       widgetKey: 'tables/object-table/v1', label: 'Object Table', category: 'Tables', capturePage: 'CDP Capture 001',
       visibleInstanceLabel: 'Object Table', marker: 'widget:object-table:a1b2c3d4', coverageStatus: 'partial',
-      requiredStates: ['editor-mounted', 'viewport-visible'], coveredStates: ['editor-mounted'], blockedStates: [],
-      states: { 'editor-mounted': 'captured', 'viewport-visible': 'missing' },
-      attempts: [{ sourceRun: 'run-1', attemptId: 'run-1:editor-mounted:1', at: '2026-07-21T00:00:00.000Z', state: 'editor-mounted', status: 'captured', required: true, failure: null }],
+      requiredStates: ['editor-mounted', 'viewport-visible'], coveredStates: ['editor-mounted'], blockedStates: ['viewport-visible'],
+      states: { 'editor-mounted': 'captured', 'viewport-visible': 'failed' },
+      attempts: [
+        { sourceRun: 'run-1', attemptId: 'run-1:editor-mounted:1', at: '2026-07-21T00:00:00.000Z', state: 'editor-mounted', status: 'captured', required: true, failure: null },
+        { sourceRun: 'run-1', attemptId: 'run-1:viewport-visible:2', at: '2026-07-21T00:00:01.000Z', state: 'viewport-visible', status: 'failed', required: true, failure: { code: 'timeout', message: 'Not visible' } },
+      ],
       firstObservedAssets: [{ kind: 'js', sha256, url: 'https://cdn.example.com/widget.js', size: 6 }],
       bodyUnavailable: [], failures: [],
     }],
   }));
 
   const report = await auditCapture(output);
-  assert.equal(report.componentAssets, 'component-assets.json');
+  assert.deepEqual(report.componentMap, { present: true, componentCount: 1, completeComponents: 0, partialComponents: 1 });
   assert.deepEqual(report.invalid, []);
 
-  const invalidMap = JSON.parse(await readFile(join(output, 'component-assets.json'), 'utf8'));
+  const invalidMap = JSON.parse(await readFile(join(metadata, 'component-assets.json'), 'utf8'));
   invalidMap.components[0].coverageStatus = 'complete';
   invalidMap.summary = { total: 1, complete: 1, partial: 0 };
+  invalidMap.components[0].requiredStates = ['editor-mounted'];
+  invalidMap.components[0].states['viewport-visible'] = 'missing';
+  invalidMap.components[0].blockedStates = [];
   invalidMap.components[0].firstObservedAssets.push({ kind: 'css', sha256: 'missing', url: 'https://cdn.example.com/missing.css', size: 1 });
   invalidMap.components[0].attempts[0].attemptId = 'not-recorded';
-  await writeFile(join(output, 'component-assets.json'), JSON.stringify(invalidMap));
+  await writeFile(join(metadata, 'component-assets.json'), JSON.stringify(invalidMap));
   const invalidReport = await auditCapture(output);
   assert.deepEqual(invalidReport.invalid.map((entry) => entry.reason).sort(), [
     'component-asset-not-in-manifest',
     'component-attempt-not-in-events',
     'component-coverage-status-inconsistent',
+    'component-required-states-inconsistent',
   ]);
 });

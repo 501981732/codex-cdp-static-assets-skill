@@ -87,7 +87,7 @@ test('imports an MCP response into the existing audited capture format', async (
   assert.deepEqual(await auditCapture(paths.output), {
     output: paths.output,
     manifest: 'manifest.ndjson',
-    componentAssets: null,
+    componentMap: { present: false, componentCount: 0, completeComponents: 0, partialComponents: 0 },
     totalFiles: 1,
     validFiles: 1,
     invalid: [],
@@ -105,6 +105,11 @@ test('provenance records only non-sensitive automation policy and fixture names'
     maxWidgetsPerPage: 5,
     states: ['editor-mounted', 'viewport-visible', 'config-opened', 'data-bound', 'preview-visible'],
   };
+  scope.approvedPageUrl = 'https://workshop.example.com/module/edit/module-1';
+  scope.moduleId = 'module-1';
+  scope.testAccount = 'synthetic-tester';
+  scope.authorizationWindow = { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' };
+  scope.stopContact = 'workshop-owner';
   scope.fixtureProfiles = {
     objects: { kind: 'synthetic-object-set', visibleOption: 'CDP Objects', secret: 'must-not-persist' },
   };
@@ -129,6 +134,8 @@ test('provenance records only non-sensitive automation policy and fixture names'
   assert.deepEqual(provenance.automation.mappedWidgetKeys, ['tables/object-table/v1']);
   assert.equal(provenanceText.includes('must-not-persist'), false);
   assert.equal(provenanceText.includes('CDP Objects'), false);
+  assert.equal(provenanceText.includes('synthetic-tester'), false);
+  assert.equal(provenanceText.includes('workshop-owner'), false);
 });
 
 test('rejects an MCP response from an unapproved host before saving the body', async () => {

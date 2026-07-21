@@ -62,8 +62,10 @@ test('builds deterministic complete and partial component coverage', () => {
     { sourceRun: 'run-2', at: '2026-07-21T00:00:04.000Z', event: 'body-unavailable', marker: 'widget:line-chart:bbbbbbbb:data-bound', kind: 'js', url: 'https://cdn.example/missing.js', status: 200, requestId: '9' },
   ];
 
-  const coverage = buildComponentCoverage({ componentEvents: [...objectEvents, ...chartEvents], manifestEvents: manifests, generatedAt: '2026-07-21T01:00:00.000Z' });
+  objectEvents.push({ ...objectEvents[0], at: '2026-07-21T00:00:09.000Z' });
+  const coverage = buildComponentCoverage({ caseId: 'SEC-1', events: [...objectEvents, ...chartEvents], manifest: manifests, generatedAt: '2026-07-21T01:00:00.000Z' });
   assert.equal(coverage.schemaVersion, 1);
+  assert.equal(coverage.caseId, 'SEC-1');
   assert.equal(coverage.generatedAt, '2026-07-21T01:00:00.000Z');
   assert.deepEqual(coverage.baseline.assets.map((asset) => asset.sha256), ['base']);
   assert.deepEqual(coverage.summary, { total: 2, complete: 1, partial: 1 });
@@ -74,6 +76,7 @@ test('builds deterministic complete and partial component coverage', () => {
   assert.equal(table.states['data-bound'], 'not-applicable');
   assert.equal(table.requiredStates.includes('data-bound'), false);
   assert.equal(table.failures[0].code, 'panel-timeout');
+  assert.equal(table.attempts.filter((attempt) => attempt.attemptId === objectEvents[0].attemptId).length, 1);
   assert.deepEqual(table.firstObservedAssets.map((asset) => asset.sha256), ['shared']);
 
   const chart = coverage.components.find((component) => component.widgetKey === chartBase.widgetKey);
@@ -89,6 +92,17 @@ test('groups the same widget key separately by capture page', () => {
     event('editor-mounted', 'captured', '1'),
     event('editor-mounted', 'captured', '2', { capturePage: 'CDP Capture 002', attemptId: 'run-1:editor-mounted:2' }),
   ];
-  const coverage = buildComponentCoverage({ componentEvents: events, manifestEvents: [], generatedAt: '2026-07-21T01:00:00.000Z' });
+  const coverage = buildComponentCoverage({ caseId: 'SEC-1', events, manifest: [], generatedAt: '2026-07-21T01:00:00.000Z' });
   assert.equal(coverage.components.length, 2);
+});
+
+test('uses required event flags and rejects cross-case events', () => {
+  const events = [
+    event('editor-mounted', 'captured', '1'),
+    event('preview-visible', 'captured', '2', { required: false }),
+  ];
+  const coverage = buildComponentCoverage({ caseId: 'SEC-1', events, manifest: [], generatedAt: '2026-07-21T01:00:00.000Z' });
+  assert.deepEqual(coverage.components[0].requiredStates, ['editor-mounted']);
+  assert.equal(coverage.components[0].coverageStatus, 'complete');
+  assert.throws(() => buildComponentCoverage({ caseId: 'OTHER', events, manifest: [] }), /caseId mismatch/);
 });

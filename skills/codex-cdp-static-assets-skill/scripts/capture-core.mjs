@@ -62,6 +62,36 @@ export function normalizeScope(input) {
   const validTypes = new Set(['js', 'css', 'wasm', 'font', 'image', 'html']);
   for (const type of types) if (!validTypes.has(type)) throw new Error(`Unsupported scope type: ${type}`);
   const automation = normalizeAutomationPolicy(input);
+  let authorization = null;
+  if (automation.enabled) {
+    const requireText = (value, field) => {
+      if (typeof value !== 'string' || !value.trim()) throw new Error(`Automation Scope requires ${field}`);
+      return value.trim();
+    };
+    const approvedPageUrl = new URL(requireText(input.approvedPageUrl, 'approvedPageUrl'));
+    if (!['http:', 'https:'].includes(approvedPageUrl.protocol) || approvedPageUrl.username || approvedPageUrl.password
+      || approvedPageUrl.search || approvedPageUrl.hash) {
+      throw new Error('approvedPageUrl must be an exact HTTP(S) URL without credentials, query, or fragment');
+    }
+    const exactPageHost = pageHosts.some((host) => !host.includes('*') && host.toLowerCase() === approvedPageUrl.hostname.toLowerCase());
+    if (!exactPageHost) throw new Error('approvedPageUrl host must exactly match pageHosts');
+    const moduleId = requireText(input.moduleId, 'moduleId');
+    if (approvedPageUrl.pathname.split('/').filter(Boolean).at(-1) !== moduleId) throw new Error('approvedPageUrl must end with moduleId');
+    const authorizationWindow = input.authorizationWindow;
+    const startsAt = requireText(authorizationWindow?.startsAt, 'authorizationWindow.startsAt');
+    const endsAt = requireText(authorizationWindow?.endsAt, 'authorizationWindow.endsAt');
+    if (Number.isNaN(Date.parse(startsAt)) || Number.isNaN(Date.parse(endsAt)) || Date.parse(startsAt) >= Date.parse(endsAt)) {
+      throw new Error('authorizationWindow must contain valid increasing timestamps');
+    }
+    authorization = Object.freeze({
+      approvedPageUrl: approvedPageUrl.toString(),
+      moduleId,
+      testAccount: requireText(input.testAccount, 'testAccount'),
+      startsAt: new Date(startsAt).toISOString(),
+      endsAt: new Date(endsAt).toISOString(),
+      stopContact: requireText(input.stopContact, 'stopContact'),
+    });
+  }
   return {
     caseId: typeof input.caseId === 'string' ? input.caseId : null,
     pageHosts,
@@ -74,6 +104,7 @@ export function normalizeScope(input) {
     fixtureProfileNames: automation.fixtureProfileNames || [],
     fixtureProfiles: automation.fixtureProfiles || Object.freeze({}),
     widgetFixtureMap: automation.widgetFixtureMap || Object.freeze({}),
+    authorization,
   };
 }
 

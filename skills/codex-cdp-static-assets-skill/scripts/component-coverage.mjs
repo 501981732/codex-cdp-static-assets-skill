@@ -49,8 +49,15 @@ function groupKey(event) {
   return `${event.capturePage}\n${event.widgetKey}`;
 }
 
-export function buildComponentCoverage({ componentEvents = [], manifestEvents = [], generatedAt = new Date().toISOString() }) {
-  const sortedEvents = [...componentEvents].sort(compareEvidence);
+export function buildComponentCoverage({ caseId, events, manifest, componentEvents = events || [], manifestEvents = manifest || [], generatedAt = new Date().toISOString() }) {
+  if (typeof caseId !== 'string' || !caseId.trim()) throw new Error('Component coverage requires caseId');
+  if (componentEvents.some((event) => event.caseId !== caseId)) throw new Error(`Component event caseId mismatch: expected ${caseId}`);
+  const deduplicatedEvents = new Map();
+  for (const event of [...componentEvents].sort(compareEvidence)) {
+    const identity = `${event.sourceRun || ''}\n${event.attemptId}`;
+    if (!deduplicatedEvents.has(identity)) deduplicatedEvents.set(identity, event);
+  }
+  const sortedEvents = [...deduplicatedEvents.values()];
   const groups = new Map();
   const markerGroups = new Map();
   for (const event of sortedEvents) {
@@ -97,7 +104,10 @@ export function buildComponentCoverage({ componentEvents = [], manifestEvents = 
     const first = group.events[0];
     const states = {};
     for (const state of COMPONENT_STATES) states[state] = selectedStateStatus(group.events.filter((event) => event.state === state));
-    const requiredStates = COMPONENT_STATES.filter((state) => !['not-applicable', 'not-requested'].includes(states[state]));
+    const requiredStates = COMPONENT_STATES.filter((state) => {
+      if (['not-applicable', 'not-requested'].includes(states[state])) return false;
+      return group.events.some((event) => event.state === state && event.required === true);
+    });
     const coveredStates = COMPONENT_STATES.filter((state) => states[state] === 'captured');
     const blockedStates = COMPONENT_STATES.filter((state) => states[state] === 'failed' || states[state].startsWith('blocked-'));
     const failures = uniqueSorted(
@@ -152,6 +162,7 @@ export function buildComponentCoverage({ componentEvents = [], manifestEvents = 
   };
   return {
     schemaVersion: 1,
+    caseId,
     generatedAt,
     summary,
     baseline: {

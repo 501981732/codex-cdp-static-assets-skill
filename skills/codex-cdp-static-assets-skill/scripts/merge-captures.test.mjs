@@ -69,11 +69,33 @@ test('merges source-run component events into component-assets.json', async () =
   })}\n`);
 
   const summary = await mergeCaptureDirectories([run], output);
-  const coverage = JSON.parse(await readFile(join(output, 'component-assets.json'), 'utf8'));
+  const coverage = JSON.parse(await readFile(join(output, 'metadata', 'component-assets.json'), 'utf8'));
   const mergedEvents = (await readFile(join(output, 'metadata', 'component-events.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(coverage.components[0].attempts[0].sourceRun, 'capture-run-1');
   assert.equal(mergedEvents[0].sourceRun, 'capture-run-1');
-  assert.deepEqual(summary.components, { total: 1, complete: 0, partial: 1 });
+  assert.equal(coverage.caseId, 'SEC-1');
+  assert.deepEqual({
+    componentCount: summary.componentCount,
+    completeComponents: summary.completeComponents,
+    partialComponents: summary.partialComponents,
+  }, { componentCount: 1, completeComponents: 1, partialComponents: 0 });
+});
+
+test('refuses to merge component evidence from different case IDs', async () => {
+  const { mergeCaptureDirectories } = await import(new URL('./merge-captures.mjs', import.meta.url));
+  const root = await mkdtemp(join(tmpdir(), 'merge-case-boundary-'));
+  const run1 = join(root, 'run-1');
+  const run2 = join(root, 'run-2');
+  await mkdir(run1, { recursive: true });
+  await mkdir(run2, { recursive: true });
+  const event = (caseId, run) => ({
+    caseId, widgetKey: 'tables/object-table/v1', label: 'Object Table', category: 'Tables', capturePage: 'CDP Capture 001',
+    visibleInstanceLabel: 'Object Table', marker: 'widget:object-table:a1b2c3d4:editor-mounted', state: 'editor-mounted',
+    status: 'captured', required: true, attemptId: `${run}:editor-mounted:1`, at: '2026-07-21T00:00:00.000Z', failure: null,
+  });
+  await writeFile(join(run1, 'component-events.ndjson'), `${JSON.stringify(event('SEC-1', 'run-1'))}\n`);
+  await writeFile(join(run2, 'component-events.ndjson'), `${JSON.stringify(event('SEC-2', 'run-2'))}\n`);
+  await assert.rejects(mergeCaptureDirectories([run1, run2], join(root, 'merged')), /different caseIds/);
 });
 
 test('refuses to merge capture runs from different known Workshop builds', async () => {

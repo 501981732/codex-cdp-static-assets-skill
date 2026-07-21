@@ -10,6 +10,14 @@ Record the case ID, exact page host/Module, test account, time and traffic ceili
 {
   "caseId": "SEC-2026-001",
   "pageHosts": ["workshop.example.com"],
+  "approvedPageUrl": "https://workshop.example.com/module/edit/module-rid",
+  "moduleId": "module-rid",
+  "testAccount": "synthetic-test-account",
+  "authorizationWindow": {
+    "startsAt": "2026-07-21T00:00:00.000Z",
+    "endsAt": "2026-07-21T08:00:00.000Z"
+  },
+  "stopContact": "workshop-owner",
   "assetHosts": ["cdn.workshop.example.com"],
   "approvedNetworkHosts": ["api.workshop.example.com"],
   "types": ["js", "css", "wasm", "font", "image", "html"],
@@ -57,7 +65,7 @@ node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
 - `single-page` requires `allowAutosave: true` and `allowCreateCapturePages: false`. At capacity, record `blocked-page-capacity` and stop.
 - Omitted automation is passive mode. An automation object must use an explicit boolean `enabled`.
 
-`maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix.
+`maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix. Automated Scope also requires an exact query-free `approvedPageUrl` whose final path segment equals `moduleId`, plus test account, increasing authorization window, and stop contact. These fields let the runner stop on same-host Module drift; account/contact values are never copied into provenance.
 
 ## Synthetic fixtures
 
@@ -86,4 +94,4 @@ Reuse one append-only Ledger across all runs. `0` disables retained asset-count 
 
 - Per run: `manifest.ndjson`, `component-events.ndjson`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`.
 - Resume state: `catalog-state.json` contains only canonical keys/counters; `network-state.json` contains only request ID/status fingerprints/counters.
-- Delivery: `metadata/manifest.ndjson`, `metadata/source-manifest.ndjson`, `metadata/component-events.ndjson`, `metadata/merge-summary.json`, `component-assets.json`, and `assets/`.
+- Delivery: `metadata/manifest.ndjson`, `metadata/source-manifest.ndjson`, `metadata/component-events.ndjson`, `metadata/component-assets.json`, `metadata/merge-summary.json`, and `assets/`.

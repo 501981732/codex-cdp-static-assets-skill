@@ -40,6 +40,11 @@ test('normalizes scope without auto-approving observed hosts', () => {
 test('accepts html as an explicit scope type', () => {
   const scope = normalizeScope({
     pageHosts: ['workshop.example.com'],
+    approvedPageUrl: 'https://workshop.example.com/module/edit/module-1',
+    moduleId: 'module-1',
+    testAccount: 'synthetic-tester',
+    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' },
+    stopContact: 'workshop-owner',
     types: ['html'],
   });
   assert.deepEqual([...scope.types], ['html']);
@@ -48,6 +53,11 @@ test('accepts html as an explicit scope type', () => {
 test('normalizes the automation and synthetic fixture policy with the capture scope', () => {
   const scope = normalizeScope({
     pageHosts: ['workshop.example.com'],
+    approvedPageUrl: 'https://workshop.example.com/module/edit/module-1',
+    moduleId: 'module-1',
+    testAccount: 'synthetic-tester',
+    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' },
+    stopContact: 'workshop-owner',
     automation: {
       enabled: true,
       mode: 'single-page',
@@ -62,6 +72,24 @@ test('normalizes the automation and synthetic fixture policy with the capture sc
   assert.equal(scope.automation.mode, 'single-page');
   assert.deepEqual(scope.fixtureProfileNames, ['objects']);
   assert.deepEqual(scope.widgetFixtureMap, { 'tables/object-table/v1': 'objects' });
+  assert.equal(scope.authorization.moduleId, 'module-1');
+});
+
+test('rejects automated scope without an exact authorized Module and run context', () => {
+  const automation = {
+    enabled: true,
+    mode: 'single-page',
+    allowAutosave: true,
+    allowCreateCapturePages: false,
+    maxWidgetsPerPage: 5,
+    states: ['editor-mounted'],
+  };
+  assert.throws(() => normalizeScope({ pageHosts: ['workshop.example.com'], automation }), /approvedPageUrl/);
+  assert.throws(() => normalizeScope({
+    pageHosts: ['workshop.example.com'], automation,
+    approvedPageUrl: 'https://other.example.com/module/edit/module-1', moduleId: 'module-1', testAccount: 'tester',
+    authorizationWindow: { startsAt: '2026-07-21T00:00:00.000Z', endsAt: '2026-07-21T08:00:00.000Z' }, stopContact: 'owner',
+  }), /exactly match pageHosts/);
 });
 
 test('rejects empty, zero, HTML, invalid WASM, and invalid font bodies', () => {

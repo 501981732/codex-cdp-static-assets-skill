@@ -116,7 +116,7 @@ node scripts/merge-captures.mjs --output ./delivery ./capture-run-1 ./capture-ru
 node scripts/audit-capture.mjs ./delivery
 ```
 
-The final `component-assets.json` groups by `(capturePage, widgetKey)`, keeps every attempt/failure, treats captured as the winning current state, excludes `not-applicable`/`not-requested` from required states, and gives each non-baseline `(sha256,url)` only to its earliest observable widget marker.
+The final `metadata/component-assets.json` groups by `(capturePage, widgetKey)`, keeps every distinct attempt/failure, computes required states from recorded `required` flags, treats captured as the winning current state, excludes `not-applicable`/`not-requested` from required states, and gives each non-baseline `(sha256,url)` only to its earliest observable widget marker.
 
 ## Stop without automatic retry
 
