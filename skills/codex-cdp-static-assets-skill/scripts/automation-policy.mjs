@@ -67,8 +67,20 @@ export function normalizeAutomationPolicy(input = {}) {
   if (automation.captureStateScreenshots !== undefined && typeof automation.captureStateScreenshots !== 'boolean') {
     throw new Error('Automation captureStateScreenshots must be a boolean');
   }
+  if (automation.allowModuleVariables !== undefined && typeof automation.allowModuleVariables !== 'boolean') {
+    throw new Error('Automation allowModuleVariables must be a boolean');
+  }
   if (automation.allowExistingModuleVariables !== undefined && typeof automation.allowExistingModuleVariables !== 'boolean') {
     throw new Error('Automation allowExistingModuleVariables must be a boolean');
+  }
+  if (automation.allowCreateTestVariables !== undefined && typeof automation.allowCreateTestVariables !== 'boolean') {
+    throw new Error('Automation allowCreateTestVariables must be a boolean');
+  }
+  if (automation.allowModifyModuleVariables !== undefined && typeof automation.allowModifyModuleVariables !== 'boolean') {
+    throw new Error('Automation allowModifyModuleVariables must be a boolean');
+  }
+  if (automation.allowDeleteModuleVariables !== undefined && typeof automation.allowDeleteModuleVariables !== 'boolean') {
+    throw new Error('Automation allowDeleteModuleVariables must be a boolean');
   }
 
   const fixtureProfiles = input.fixtureProfiles || {};
@@ -83,12 +95,19 @@ export function normalizeAutomationPolicy(input = {}) {
     if (!Object.hasOwn(fixtureProfiles, profileName)) throw new Error(`Widget ${widgetKey} references unknown fixture profile: ${profileName}`);
   }
 
+  const allowModuleVariables = automation.allowModuleVariables === true;
   return Object.freeze({
     enabled: true,
     mode: automation.mode,
     allowAutosave: true,
     allowCreateCapturePages: automation.allowCreateCapturePages,
-    allowExistingModuleVariables: automation.allowExistingModuleVariables === true,
+    allowModuleVariables,
+    // Retain old Scope fields for audit compatibility. New Scopes use the one
+    // consolidated allowModuleVariables authorization.
+    allowExistingModuleVariables: allowModuleVariables || automation.allowExistingModuleVariables === true,
+    allowCreateTestVariables: allowModuleVariables || automation.allowCreateTestVariables === true,
+    allowModifyModuleVariables: allowModuleVariables || automation.allowModifyModuleVariables === true,
+    allowDeleteModuleVariables: allowModuleVariables || automation.allowDeleteModuleVariables === true,
     captureStateScreenshots: automation.captureStateScreenshots === true,
     maxWidgetsPerPage: automation.maxWidgetsPerPage,
     states: Object.freeze(normalizedStates),

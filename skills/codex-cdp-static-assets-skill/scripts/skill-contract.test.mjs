@@ -39,7 +39,7 @@ test('skill defines one-authorization automated widget capture with explicit bou
     'single consolidated authorization',
     'editor-mounted',
     'data-bound',
-    'allowExistingModuleVariables',
+    'allowModuleVariables',
     'preview-visible',
     'baseline:catalog',
     'assetCoverageStatus',
