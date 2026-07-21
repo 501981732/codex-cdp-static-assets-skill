@@ -22,7 +22,7 @@ This is an evidence workflow, not a source-code recovery claim. It covers only w
 
 Before authorization, use only metadata-preserving discovery: `list_pages`, exact-page `select_page`, `take_snapshot`, and `list_network_requests`. Do not read response bodies or mutate the Module.
 
-Present one consolidated Scope containing exact host candidates and all intended actions: reload the exact page, open Add Widget, scroll the visible catalog/canvas, add widgets, create deterministic capture pages when authorized, open configuration, select only mapped synthetic fixtures, accept autosave, enter preview, and read completed approved response bodies.
+Present one consolidated Scope containing exact host candidates and all intended actions: reload the exact page, open Add Widget, scroll the visible catalog/canvas, add widgets, create deterministic capture pages when authorized, open configuration, select only mapped synthetic fixtures, accept autosave, enter preview, optionally capture element-level state screenshots, and read completed approved response bodies.
 
 After the user approves that Scope once, run automatically without per-widget or per-batch confirmations. A new host, new write type, missing authority, ambiguous add result, authentication challenge, or owner limit is a new boundary and stops the run.
 
@@ -40,9 +40,10 @@ After the user approves that Scope once, run automatically without per-widget or
    - `config-opened`: open visible widget configuration.
    - `data-bound`: if no data-source capability exists, record `not-applicable`; if data is optional and no mapping is approved, record `not-requested`; if required and no approved mapping exists, record `blocked-missing-fixture`; otherwise select only the exact mapped synthetic Profile and allow the approved autosave.
    - `preview-visible`: enter visible preview and scroll the widget into view.
-8. At every state, inspect the complete request list first. Stop before body access on an unknown host, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, or unexpected write. Wait for three identical request/status observations: baseline plus two unchanged observations.
-9. For each approved completed request, call `get_network_request` once by request ID, import the staged body immediately, and delete staging through the importer. Record `body-unavailable` when Chrome cannot supply the body; never refetch the URL.
-10. Record every state attempt with `record-component-state.mjs`. Audit each run, merge once with `merge-captures.mjs`, then audit the delivery and `component-assets.json`.
+8. When `captureStateScreenshots` is authorized, capture the uniquely identified visible Widget or configuration panel after each successful state to `evidence/components/<marker-base>/<state>--<attempt-number>.png`. Do not persist DOM or full-page screenshots.
+9. At every state, inspect the complete request list first. Stop before body access on an unknown host, `401`, `403`, `429`, repeated `5xx`, CAPTCHA/MFA, logout, account warning, or unexpected write. Wait for three identical request/status observations: baseline plus two unchanged observations.
+10. For each approved completed request, call `get_network_request` once by request ID, import the staged body immediately, and delete staging through the importer. Record `body-unavailable` when Chrome cannot supply the body; never refetch the URL.
+11. Record every state attempt with `record-component-state.mjs`. Audit each run, merge once with `merge-captures.mjs`, then audit the delivery and `component-assets.json`.
 
 ## HTML boundary
 
@@ -54,10 +55,12 @@ Never retain HTML from XHR, fetch, GraphQL, or an API. JavaScript/CSS bodies tha
 
 Never use `evaluate_script`. Never set `requestFilePath`; `get_network_request` may receive only a response output path under the resolved `os.tmpdir()` staging root. Never clear/disable cache, bypass Service Workers, intercept requests, replay URLs, enumerate chunks, probe sourcemaps, expose hidden routes, change permissions, publish, execute actions/workflows, export data, or create/modify/delete data sources.
 
-Use only visible, authorized controls. `click`, `drag`, `fill`, `press_key`, `wait_for`, `take_snapshot`, and exact-page reload are allowed only after the consolidated Scope is approved.
+Use only visible, authorized controls. `click`, `drag`, `fill`, `press_key`, `wait_for`, `take_snapshot`, authorized element-level `take_screenshot`, and exact-page reload are allowed only after the consolidated Scope is approved.
 
 ## Output and claims
 
-Each run contains content-addressed assets, redacted manifest entries, state attempts, risk/invalid events, and summary counters. The merged delivery contains `metadata/manifest.ndjson`, `metadata/component-events.ndjson`, `metadata/source-manifest.ndjson`, `metadata/component-assets.json`, and assets at their redacted delivery paths.
+Each run contains content-addressed assets, redacted manifest entries, state attempts, optional state screenshots, risk/invalid events, and summary counters. The merged delivery contains the aggregate `metadata/component-assets.json`, `metadata/baseline-assets.json`, one reverse-engineering view per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated assets at their redacted delivery paths.
 
 `component-assets.json` distinguishes `baseline/shared`, per-widget `firstObservedAssets`, `bodyUnavailable`, failures, and complete/partial state coverage. First observation is evidence of timing, not proof that a bundle belongs exclusively to that widget.
+
+Each per-Widget view renames this evidence to `newlyObservedAssets`, resolves every asset to its merged delivery `file`, and links to the separate baseline view. Approved Document HTML is a network document, not a serialized runtime Widget DOM.

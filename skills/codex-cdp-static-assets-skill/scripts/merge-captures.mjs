@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -71,6 +72,97 @@ function deliveryBasePath(entry) {
 function addHashSuffix(path, sha256) {
   const extension = extname(path);
   return `${path.slice(0, path.length - extension.length)}.__${sha256.slice(0, 8)}${extension}`;
+}
+
+function readableSlug(value) {
+  return String(value || 'component')
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
+    .replace(/^-+|-+$/g, '') || 'component';
+}
+
+function componentViewFileName(component) {
+  const suffix = createHash('sha256').update(`${component.capturePage}\n${component.widgetKey}`).digest('hex').slice(0, 8);
+  return `${readableSlug(component.label)}--${suffix}.json`;
+}
+
+function componentEvidenceDirectory(component) {
+  return validatePathSegment(component.marker.replaceAll(':', '--'));
+}
+
+async function listDirectory(path) {
+  try {
+    return await readdir(path, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function copyComponentScreenshots(component, inputByRun, output) {
+  const screenshots = [];
+  const evidenceDirectory = componentEvidenceDirectory(component);
+  const sourceRuns = [...new Set(component.attempts.map((attempt) => attempt.sourceRun).filter(Boolean))].sort();
+  for (const sourceRun of sourceRuns) {
+    const input = inputByRun.get(sourceRun);
+    if (!input) continue;
+    const sourceDirectory = join(input, 'evidence', 'components', evidenceDirectory);
+    const entries = await listDirectory(sourceDirectory);
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+      if (!entry.isFile()) continue;
+      const match = /^(.*)--(\d+)\.png$/.exec(entry.name);
+      if (!match || !Object.hasOwn(component.states, match[1])) continue;
+      const relativePath = join('evidence', sourceRun, 'components', evidenceDirectory, entry.name);
+      const destination = join(output, relativePath);
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(join(sourceDirectory, entry.name), destination);
+      screenshots.push({ state: match[1], sourceRun, file: relativePath });
+    }
+  }
+  return screenshots;
+}
+
+function enrichedAsset(asset, mergedByIdentity) {
+  const merged = mergedByIdentity.get(`${asset.sha256}\n${asset.url}`);
+  if (!merged) throw new Error(`Component asset is missing from merged manifest: ${asset.sha256}`);
+  return { ...asset, file: merged.file };
+}
+
+async function writeReverseEngineeringViews({ componentCoverage, mergedManifest, inputs, output, metadata }) {
+  const mergedByIdentity = new Map(mergedManifest.map((entry) => [`${entry.sha256}\n${entry.url}`, entry]));
+  const inputByRun = new Map(inputs.map((input) => [basename(input), input]));
+  const baseline = {
+    schemaVersion: 1,
+    caseId: componentCoverage.caseId,
+    generatedAt: componentCoverage.generatedAt,
+    attribution: 'baseline-shared-no-component-ownership',
+    baseline: {
+      ...componentCoverage.baseline,
+      assets: componentCoverage.baseline.assets.map((asset) => enrichedAsset(asset, mergedByIdentity)),
+    },
+  };
+  await writeFile(join(metadata, 'baseline-assets.json'), JSON.stringify(baseline, null, 2));
+
+  const componentsDirectory = join(metadata, 'components');
+  await mkdir(componentsDirectory, { recursive: true });
+  for (const component of componentCoverage.components) {
+    const { firstObservedAssets, ...componentDetails } = component;
+    const screenshots = await copyComponentScreenshots(component, inputByRun, output);
+    const view = {
+      schemaVersion: 1,
+      caseId: componentCoverage.caseId,
+      generatedAt: componentCoverage.generatedAt,
+      attribution: 'first-observed-not-exclusive-ownership',
+      baselineAssetsFile: '../baseline-assets.json',
+      component: {
+        ...componentDetails,
+        newlyObservedAssets: firstObservedAssets.map((asset) => enrichedAsset(asset, mergedByIdentity)),
+        screenshots,
+      },
+    };
+    await writeFile(join(componentsDirectory, componentViewFileName(component)), JSON.stringify(view, null, 2));
+  }
 }
 
 export async function mergeCaptureDirectories(inputDirectories, outputDirectory) {
@@ -199,7 +291,10 @@ export async function mergeCaptureDirectories(inputDirectories, outputDirectory)
   await writeFile(join(metadata, 'source-manifest.ndjson'), ndjson(sourceManifest));
   await writeFile(join(metadata, 'component-events.ndjson'), ndjson(componentEvents));
   await writeFile(join(metadata, 'merge-summary.json'), JSON.stringify(summary, null, 2));
-  if (componentCoverage) await writeFile(join(metadata, 'component-assets.json'), JSON.stringify(componentCoverage, null, 2));
+  if (componentCoverage) {
+    await writeFile(join(metadata, 'component-assets.json'), JSON.stringify(componentCoverage, null, 2));
+    await writeReverseEngineeringViews({ componentCoverage, mergedManifest, inputs, output, metadata });
+  }
   return summary;
 }
 

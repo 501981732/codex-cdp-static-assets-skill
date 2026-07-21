@@ -32,6 +32,7 @@ Record the case ID, exact page host/Module, test account, time and traffic ceili
     "mode": "full-catalog",
     "allowAutosave": true,
     "allowCreateCapturePages": true,
+    "captureStateScreenshots": true,
     "maxWidgetsPerPage": 8,
     "states": [
       "editor-mounted",
@@ -63,6 +64,7 @@ node scripts/automation-policy.mjs validate-scope --scope ./capture-scope.json
 
 - `full-catalog` requires `allowAutosave: true` and `allowCreateCapturePages: true`. Pages are named `CDP Capture 001`, `CDP Capture 002`, and so on.
 - `single-page` requires `allowAutosave: true` and `allowCreateCapturePages: false`. At capacity, record `blocked-page-capacity` and stop.
+- `captureStateScreenshots: true` authorizes element-level PNG evidence for successful visible states. Omit it or set it to `false` to retain no screenshots.
 - Omitted automation is passive mode. An automation object must use an explicit boolean `enabled`.
 
 `maxWidgetsPerPage` must be at least 1; use 5–10 by default. All state names must be from the fixed state matrix. Automated Scope also requires a non-empty Case ID, an exact query-free `approvedPageUrl` whose final path segment equals `moduleId`, plus test account, a currently active increasing authorization window, and stop contact. Expired or not-yet-active Scope is rejected. These fields let the runner stop on same-host Module drift; account/contact values are never copied into provenance.
@@ -92,6 +94,6 @@ Reuse one append-only Ledger across all runs. `0` disables retained asset-count 
 
 ## Outputs
 
-- Per run: `manifest.ndjson`, `component-events.ndjson`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`.
+- Per run: `manifest.ndjson`, `component-events.ndjson`, optional `evidence/components/<marker-base>/<state>--<attempt-number>.png`, `markers.ndjson`, `risk-events.ndjson`, `invalid-assets.ndjson`, `summary.json`, `provenance.json`.
 - Resume state: `catalog-state.json` contains only canonical keys/counters; `network-state.json` contains only request ID/status fingerprints/counters.
-- Delivery: `metadata/manifest.ndjson`, `metadata/source-manifest.ndjson`, `metadata/component-events.ndjson`, `metadata/component-assets.json`, `metadata/merge-summary.json`, and `assets/`.
+- Delivery: aggregate metadata, `metadata/baseline-assets.json`, one file per Widget under `metadata/components/`, optional screenshots under `evidence/`, and globally deduplicated `assets/`.

@@ -37,7 +37,7 @@ Do not infer trust from a CDN suffix. Discovery candidates remain unapproved unt
 
 ## Visible automation after approval
 
-Use snapshots before and after each visible action. `click`, `drag`, `fill`, `press_key`, and `wait_for` may operate only the authorized Module and state matrix. Exact-page reload may use `navigate_page` reload; do not navigate to a newly constructed resource URL.
+Use snapshots before and after each visible action. `click`, `drag`, `fill`, `press_key`, and `wait_for` may operate only the authorized Module and state matrix. When the Scope enables `captureStateScreenshots`, use `take_screenshot` only with the unique visible Widget/panel `uid` and a PNG path under the current capture run. Exact-page reload may use `navigate_page` reload; do not navigate to a newly constructed resource URL.
 
 Never use page-script evaluation. Accessibility snapshots are transient inputs, not output artifacts. Store only canonical widget keys and minimal progress counters.
 

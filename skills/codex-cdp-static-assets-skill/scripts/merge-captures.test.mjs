@@ -55,7 +55,9 @@ test('merges source-run component events into component-assets.json', async () =
   const run = join(root, 'capture-run-1');
   const output = join(root, 'merged');
   await mkdir(join(run, 'assets', 'js'), { recursive: true });
+  await mkdir(join(run, 'evidence', 'components', 'widget--object-table--a1b2c3d4'), { recursive: true });
   await writeFile(join(run, 'assets', 'js', 'widget.js'), 'widget');
+  await writeFile(join(run, 'evidence', 'components', 'widget--object-table--a1b2c3d4', 'editor-mounted--1.png'), 'png');
   const marker = 'widget:object-table:a1b2c3d4:editor-mounted';
   await writeFile(join(run, 'manifest.ndjson'), `${JSON.stringify({
     at: '2026-07-21T00:00:01.000Z', event: 'saved', marker, kind: 'js', sha256: 'widget',
@@ -70,10 +72,27 @@ test('merges source-run component events into component-assets.json', async () =
 
   const summary = await mergeCaptureDirectories([run], output);
   const coverage = JSON.parse(await readFile(join(output, 'metadata', 'component-assets.json'), 'utf8'));
+  const baseline = JSON.parse(await readFile(join(output, 'metadata', 'baseline-assets.json'), 'utf8'));
+  const componentFiles = (await import('node:fs/promises')).readdir(join(output, 'metadata', 'components'));
+  const componentFile = (await componentFiles)[0];
+  const componentView = JSON.parse(await readFile(join(output, 'metadata', 'components', componentFile), 'utf8'));
   const mergedEvents = (await readFile(join(output, 'metadata', 'component-events.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(coverage.components[0].attempts[0].sourceRun, 'capture-run-1');
   assert.equal(mergedEvents[0].sourceRun, 'capture-run-1');
   assert.equal(coverage.caseId, 'SEC-1');
+  assert.equal(baseline.attribution, 'baseline-shared-no-component-ownership');
+  assert.equal(componentFile.startsWith('object-table--'), true);
+  assert.equal(componentView.attribution, 'first-observed-not-exclusive-ownership');
+  assert.equal(componentView.baselineAssetsFile, '../baseline-assets.json');
+  assert.equal(componentView.component.firstObservedAssets, undefined);
+  assert.deepEqual(componentView.component.newlyObservedAssets, [{
+    kind: 'js', sha256: 'widget', url: 'https://cdn.example/widget.js', size: 6,
+    file: 'assets/cdn.example/widget.js',
+  }]);
+  assert.deepEqual(componentView.component.screenshots, [{
+    state: 'editor-mounted', sourceRun: 'capture-run-1',
+    file: 'evidence/capture-run-1/components/widget--object-table--a1b2c3d4/editor-mounted--1.png',
+  }]);
   assert.deepEqual({
     componentCount: summary.componentCount,
     completeComponents: summary.completeComponents,
@@ -135,4 +154,18 @@ test('refuses to merge capture runs from different known Workshop builds', async
     /Workshop build mismatch/,
   );
   assert.equal(await access(output).then(() => true, () => false), false);
+});
+
+test('rejects unsafe component evidence marker paths', async () => {
+  const { mergeCaptureDirectories } = await import(new URL('./merge-captures.mjs', import.meta.url));
+  const root = await mkdtemp(join(tmpdir(), 'merge-unsafe-evidence-'));
+  const run = join(root, 'capture-run-1');
+  await mkdir(run, { recursive: true });
+  await writeFile(join(run, 'component-events.ndjson'), `${JSON.stringify({
+    caseId: 'SEC-1', widgetKey: 'tables/object-table/v1', label: 'Object Table', category: 'Tables',
+    capturePage: 'CDP Capture 001', visibleInstanceLabel: 'Object Table',
+    marker: 'widget:../../escape:deadbeef:editor-mounted', state: 'editor-mounted', status: 'captured',
+    required: true, attemptId: 'capture-run-1:editor-mounted:1', at: '2026-07-21T00:00:00.000Z', failure: null,
+  })}\n`);
+  await assert.rejects(mergeCaptureDirectories([run], join(root, 'merged')), /Unsafe URL path segment/);
 });

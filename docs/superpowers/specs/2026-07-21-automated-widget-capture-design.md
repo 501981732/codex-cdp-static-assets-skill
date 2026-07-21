@@ -25,6 +25,7 @@
 - 编辑专用测试 Module 及允许自动保存的权限；
 - 全目录模式下创建新采集页面的权限，以及单页 Widget 上限；
 - 允许自动执行的 UI 操作；
+- 是否允许保存组件或配置面板的状态截图；
 - 要覆盖的 Widget 状态矩阵；
 - 允许使用的现有合成测试数据源，以及 Widget 到数据源 Profile 的精确映射；
 - 禁止动作和停止条件。
@@ -191,6 +192,24 @@ HTML 只有同时满足以下条件时才允许保留：
 - `blocked-existing-instance-ambiguous`：恢复时无法通过已记录可见信息唯一定位现有 Widget 实例。
 
 对于因缓存而没有产生可观察证据的资源，不得虚构 `reused-by` 关系。
+
+为方便后续按组件逆向，合并产物还必须生成派生视图，但不能复制资源正文：
+
+```text
+delivery/
+├── assets/                         # 资源实体全局去重
+├── evidence/                       # Scope 允许时保存组件状态截图
+└── metadata/
+    ├── component-assets.json       # 全量机器索引
+    ├── baseline-assets.json        # 页面启动和公共资源
+    └── components/
+        ├── input--<短哈希>.json
+        └── object-table--<短哈希>.json
+```
+
+每个组件视图把聚合模型中的 `firstObservedAssets` 表达为 `newlyObservedAssets`，并为每项资源补充合并后的 `file` 路径。该名称只表示资源首次在该组件状态期间被观察到，不表示资源由该组件独占。组件视图通过 `baselineAssetsFile` 指向独立基线，不重复嵌入公共资源。
+
+Scope 设置 `captureStateScreenshots: true` 时，每个成功状态可以保存唯一可见组件或配置面板的 PNG。截图路径使用稳定 Marker 和尝试序号；禁止全页截图，无法唯一定位可见目标时省略截图，不扩大采集范围。HTML 仍只指 Network 中的顶层或 Widget iframe Document，不代表运行后组件 DOM。
 
 ## 失败处理
 

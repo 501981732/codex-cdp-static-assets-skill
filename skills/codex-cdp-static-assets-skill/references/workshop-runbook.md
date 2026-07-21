@@ -9,7 +9,7 @@ Automatically exercise every visible Widget and its naturally triggered loading 
 1. Connect to the signed-in default Chrome with MCP `--autoConnect` and select the unique exact `pageHosts` page.
 2. Keep snapshots and page-list results in memory. Use `take_snapshot` to verify the approved Module and visible Add Widget entry point.
 3. Use `list_network_requests` without body reads to list exact current hosts and statuses.
-4. Present the exact host candidates, automation mode, autosave/page-creation actions, five states, asset limits, and synthetic fixture Profiles as a **single consolidated authorization**.
+4. Present the exact host candidates, automation mode, autosave/page-creation actions, five states, optional element-level screenshots, asset limits, and synthetic fixture Profiles as a **single consolidated authorization**.
 5. Write and validate `capture-scope.json`. Do not mutate before approval.
 
 ## Phase 2: baseline
@@ -71,6 +71,14 @@ Then run states in this order:
 
 After configuration, scroll back to the widget before capture so configuration-driven lazy rendering is not missed.
 
+If `captureStateScreenshots` is true and the successful state has a unique Widget or panel `uid`, save a PNG with `take_screenshot` to:
+
+```text
+<capture-run>/evidence/components/<marker-base-with-colons-replaced-by-double-hyphens>/<state>--<attempt-number>.png
+```
+
+Do not take full-page screenshots. A missing unique target omits only the screenshot; it does not convert an otherwise successful resource state into a failure.
+
 For each attempt, append an event:
 
 ```bash
@@ -116,7 +124,9 @@ node scripts/merge-captures.mjs --output ./delivery ./capture-run-1 ./capture-ru
 node scripts/audit-capture.mjs ./delivery
 ```
 
-The final `metadata/component-assets.json` groups by `(capturePage, widgetKey)`, keeps every distinct attempt/failure, computes required states from recorded `required` flags, treats captured as the winning current state, excludes `not-applicable`/`not-requested` from required states, and gives each non-baseline `(sha256,url)` only to its earliest observable widget marker.
+The final `metadata/component-assets.json` remains the machine-readable aggregate. Merge also writes `metadata/baseline-assets.json` and one human-oriented file per Widget under `metadata/components/`. Each Widget view uses `newlyObservedAssets`, resolves assets to the merged delivery path, lists copied screenshots, and links to the separate baseline file. Resource bodies remain globally deduplicated.
+
+Document HTML means an observed top-level or Widget iframe network document. It is not a serialized post-render Widget DOM.
 
 ## Stop without automatic retry
 

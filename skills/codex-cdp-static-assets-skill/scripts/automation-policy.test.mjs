@@ -39,7 +39,7 @@ function validInput(overrides = {}) {
 }
 
 test('normalizes and freezes a fully authorized automation policy', () => {
-  const policy = normalizeAutomationPolicy(validInput());
+  const policy = normalizeAutomationPolicy(validInput({ automation: { captureStateScreenshots: true } }));
   assert.equal(policy.enabled, true);
   assert.equal(policy.mode, 'full-catalog');
   assert.equal(policy.maxWidgetsPerPage, 8);
@@ -47,6 +47,7 @@ test('normalizes and freezes a fully authorized automation policy', () => {
   assert.equal(Object.isFrozen(policy), true);
   assert.equal(Object.isFrozen(policy.states), true);
   assert.deepEqual(policy.fixtureProfileNames, ['objectSet']);
+  assert.equal(policy.captureStateScreenshots, true);
 });
 
 test('rejects incomplete or unsafe automation authorization', () => {
@@ -57,6 +58,7 @@ test('rejects incomplete or unsafe automation authorization', () => {
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { maxWidgetsPerPage: 0 } })), /maxWidgetsPerPage/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { mode: 'other' } })), /mode/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { states: ['editor-mounted', 'hidden-state'] } })), /state/);
+  assert.throws(() => normalizeAutomationPolicy(validInput({ automation: { captureStateScreenshots: 'yes' } })), /captureStateScreenshots/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ fixtureProfiles: { broken: { kind: 'synthetic' } } })), /visibleOption/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ widgetFixtureMap: { 'tables/object-table/v1': 'missing' } })), /unknown fixture profile/);
   assert.throws(() => normalizeAutomationPolicy(validInput({ fallbackDataSource: 'production' })), /real data source fallback/);

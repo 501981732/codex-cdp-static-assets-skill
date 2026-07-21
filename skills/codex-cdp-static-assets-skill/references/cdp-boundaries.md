@@ -8,12 +8,13 @@ Only after the single consolidated authorization, use these Chrome DevTools MCP 
 |---|---|
 | Enumerate/select the exact target | `list_pages`, `select_page` |
 | Read visible UI state | `take_snapshot` |
+| Retain authorized visible-state evidence | `take_screenshot` with a unique Widget/panel `uid` and PNG `filePath` under the capture run |
 | Reload only the exact approved page | `navigate_page` with reload |
 | Use visible controls | `click`, `drag`, `fill`, `press_key`, `wait_for` |
 | Inspect already observed requests | `list_network_requests` |
 | Read one completed response | `get_network_request` with `reqid` and `responseFilePath` |
 
-Visible actions are restricted to the approved Workshop Module: Add Widget, deterministic capture-page creation, canvas/catalog scrolling, widget configuration, exact synthetic fixture selection, autosave, and preview.
+Visible actions are restricted to the approved Workshop Module: Add Widget, deterministic capture-page creation, canvas/catalog scrolling, widget configuration, exact synthetic fixture selection, autosave, preview, and explicitly authorized element-level state screenshots.
 
 ## Prohibited operations
 
@@ -23,6 +24,7 @@ Never use `evaluate_script`. Never set `requestFilePath`.
 - Never inspect hidden DOM state, execute page-context JavaScript, expose hidden routes, enumerate chunk IDs, scan directories, or probe sourcemaps.
 - Never clear/disable cache, bypass a Service Worker, intercept traffic, or alter headers, signatures, origin, referer, fingerprint, requests, or responses.
 - Never extract or transfer cookies, Authorization values, passwords, request bodies, browser profiles, or unrelated tab metadata.
+- Never use full-page screenshots or retain accessibility/DOM snapshots. If the Widget or panel cannot be uniquely targeted, omit the screenshot instead of widening the evidence scope.
 - Never publish, run actions/workflows, export, change permissions, write production data, or create/modify/delete a data source.
 
 ## Response-body rule

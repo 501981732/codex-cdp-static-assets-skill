@@ -54,6 +54,9 @@ export function normalizeAutomationPolicy(input = {}) {
   if (!Array.isArray(automation.states) || automation.states.length === 0) throw new Error('Automation states must be a non-empty array');
   const normalizedStates = [...new Set(automation.states)];
   for (const state of normalizedStates) if (!COMPONENT_STATES.includes(state)) throw new Error(`Unknown automation state: ${state}`);
+  if (automation.captureStateScreenshots !== undefined && typeof automation.captureStateScreenshots !== 'boolean') {
+    throw new Error('Automation captureStateScreenshots must be a boolean');
+  }
 
   const fixtureProfiles = input.fixtureProfiles || {};
   if (!fixtureProfiles || Array.isArray(fixtureProfiles) || typeof fixtureProfiles !== 'object') throw new Error('fixtureProfiles must be an object');
@@ -72,6 +75,7 @@ export function normalizeAutomationPolicy(input = {}) {
     mode: automation.mode,
     allowAutosave: true,
     allowCreateCapturePages: automation.allowCreateCapturePages,
+    captureStateScreenshots: automation.captureStateScreenshots === true,
     maxWidgetsPerPage: automation.maxWidgetsPerPage,
     states: Object.freeze(normalizedStates),
     fixtureProfiles: freezeRecord(fixtureProfiles),
